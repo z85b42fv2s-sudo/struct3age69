@@ -32,9 +32,15 @@ st.set_page_config(page_title="Structural 3age", layout="wide")
 def load_users():
     try:
         df = pd.read_csv(USERS_FILE)
+        # Se il file è vuoto o non ha le colonne giuste, ricrea l'intestazione
+        if df.empty or not all(col in df.columns for col in ["email", "data_registrazione", "abbonato"]):
+            df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
+            df.to_csv(USERS_FILE, index=False)
         return df
     except Exception:
-        return pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
+        df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
+        df.to_csv(USERS_FILE, index=False)
+        return df
 
 def save_user(email, abbonato=False):
     df = load_users()
