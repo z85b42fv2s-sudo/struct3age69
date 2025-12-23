@@ -75,17 +75,15 @@ authenticator = stauth.Authenticate(
 
 
 # La funzione login restituisce None se location è diverso da 'unrendered'.
-login_result = authenticator.login(location="sidebar")
 
-# Recupera lo stato di autenticazione e username dalla classe (compatibile con le versioni recenti)
-auth_status = getattr(authenticator, "authentication_status", None)
-username = getattr(authenticator, "username", None)
+# Per streamlit-authenticator 0.3.2: login restituisce (name, authentication_status, username)
+name, authentication_status, username = authenticator.login(location="sidebar")
 
 # DEBUG: Mostra lo stato di autenticazione e username
-st.sidebar.info(f"DEBUG - auth_status: {auth_status}")
+st.sidebar.info(f"DEBUG - auth_status: {authentication_status}")
 st.sidebar.info(f"DEBUG - username: {username}")
 
-if auth_status:
+if authentication_status:
     save_user(username)
     in_trial, abbonato = check_trial(username)
     if not in_trial:
@@ -96,10 +94,10 @@ if auth_status:
     elif not abbonato:
         days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(load_users()[load_users()["email"] == username].iloc[0]["data_registrazione"], "%Y-%m-%d")).days
         st.info(f"Periodo di prova attivo. Giorni rimanenti: {days_left}")
-elif auth_status is False:
+elif authentication_status is False:
     st.error("Username/password errati")
     st.stop()
-elif auth_status is None:
+elif authentication_status is None:
     st.warning("Inserisci username e password")
     st.stop()
 
