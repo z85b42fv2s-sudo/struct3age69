@@ -15,8 +15,47 @@ import stripe
 # Force clear Streamlit cache to reload modules
 st.cache_resource.clear()
 
+
 # Force reload regulation_handler to get latest code
 importlib.reload(regulation_handler)
+
+# --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
+def pagina_iscrizione_pagamento():
+    st.title("Iscrizione e Pagamento")
+    st.write("Compila il modulo per iscriverti e abbonarti al servizio.")
+    email = st.text_input("Email", "")
+    if st.button("Procedi al pagamento con Stripe"):
+        if not email or "@" not in email:
+            st.error("Inserisci una email valida.")
+        else:
+            try:
+                stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+                session = stripe.checkout.Session.create(
+                    payment_method_types=["card"],
+                    customer_email=email,
+                    line_items=[{
+                        "price_data": {
+                            "currency": "eur",
+                            "product_data": {"name": "Abbonamento Structural 3age"},
+                            "unit_amount": int(9.90 * 100),
+                            "recurring": {"interval": "month"}
+                        },
+                        "quantity": 1
+                    }],
+                    mode="subscription",
+                    success_url=os.getenv("SUCCESS_URL", "https://google.com"),
+                    cancel_url=os.getenv("CANCEL_URL", "https://google.com")
+                )
+                st.success("Verrai reindirizzato al pagamento...")
+                st.markdown(f"<a href='{session.url}' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Vai a Stripe</button></a>", unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Errore nella creazione della sessione Stripe: {e}")
+
+# --- NAVIGAZIONE PAGINE ---
+pagina = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
+if pagina == "Iscrizione e Pagamento":
+    pagina_iscrizione_pagamento()
+    st.stop()
 
 
 # Carica variabili d'ambiente dal file .env solo in locale (se presente)
