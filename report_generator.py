@@ -71,4 +71,5 @@ def generate_pdf(data, analysis_text, images):
             except Exception as e:
                 pdf.cell(0, 10, f"Errore caricamento immagine: {str(e)}", 0, 1)
 
-    return bytes(pdf.output())
+    # Restituisci il PDF come bytes
+    return pdf.output(dest="S").encode("latin1")

@@ -1,5 +1,5 @@
 @echo off
 echo Avvio dell'applicazione Analisi Strutturale...
 cd /d "%~dp0"
-python -m streamlit run app.py
+C:\Users\Utente\AppData\Local\Python\pythoncore-3.14-64\python.exe -m streamlit run app.py
 pause

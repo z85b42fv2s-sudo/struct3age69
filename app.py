@@ -82,12 +82,20 @@ authenticator = stauth.Authenticate(
 
 # La funzione login restituisce None se location è diverso da 'unrendered'.
 
-# Per streamlit-authenticator 0.3.2: login restituisce (name, authentication_status, username)
 name, authentication_status, username = authenticator.login(location="sidebar")
 
-# DEBUG: Mostra lo stato di autenticazione e username
-st.sidebar.info(f"DEBUG - auth_status: {authentication_status}")
-st.sidebar.info(f"DEBUG - username: {username}")
+# --- SEZIONE ISCRIZIONE/ABBONAMENTO PUBBLICA ---
+st.sidebar.markdown("---")
+st.sidebar.header("📝 Iscriviti / Abbonati")
+st.sidebar.write("""
+Accedi a tutte le funzionalità avanzate dell'app con l'abbonamento mensile. Dopo la prova gratuita, potrai continuare solo se abbonato.
+""")
+st.sidebar.markdown("""
+<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>
+""", unsafe_allow_html=True)
+st.sidebar.info("Hai già un account? Effettua il login nella sezione sopra.")
+
+st.sidebar.markdown("---")
 
 if authentication_status:
     save_user(username)
@@ -109,21 +117,11 @@ elif authentication_status is None:
 
 st.title("Structural 3age - Analisi Condizione Strutture")
 
-# Sidebar for API Key
-# Cerca la chiave prima nelle variabili d'ambiente
-env_api_key = os.getenv("OPENAI_API_KEY")
-# Se la chiave è quella di default/placeholder, non precompilarla o avvisa
-if env_api_key and "inserisci-qui" in env_api_key:
-    env_api_key = ""
-
-api_key = st.sidebar.text_input("OpenAI API Key", value=env_api_key if env_api_key else "", type="password")
+# Gestione sicura della chiave OpenAI: solo da variabili d'ambiente/secrets
+api_key = os.getenv("OPENAI_API_KEY")
 
 if not api_key:
-    st.sidebar.warning("Inserisci la tua OpenAI API Key per usare le funzioni AI.")
-elif "inserisci-qui" in api_key:
-    st.sidebar.error("La chiave inserita sembra essere un placeholder. Inserisci una chiave valida.")
-else:
-    os.environ["OPENAI_API_KEY"] = api_key
+    st.sidebar.warning("Chiave OpenAI non trovata. Contatta l'amministratore.")
 
 # --- SEZIONE 1: Dati Generali ---
 st.header("1. Dati Generali della Struttura")
