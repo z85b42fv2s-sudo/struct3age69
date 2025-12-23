@@ -73,7 +73,7 @@ authenticator = stauth.Authenticate(
     cookie_expiry_days=7
 )
 
-name, authentication_status, username = authenticator.login("Login", "sidebar")
+name, authentication_status, username = authenticator.login(location="sidebar")
 
 if authentication_status:
     save_user(username)
