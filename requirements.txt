@@ -3,3 +3,4 @@ streamlit-authenticator
 stripe
 python-dotenv
 pandas
+openai
