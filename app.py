@@ -81,6 +81,10 @@ login_result = authenticator.login(location="sidebar")
 auth_status = getattr(authenticator, "authentication_status", None)
 username = getattr(authenticator, "username", None)
 
+# DEBUG: Mostra lo stato di autenticazione e username
+st.sidebar.info(f"DEBUG - auth_status: {auth_status}")
+st.sidebar.info(f"DEBUG - username: {username}")
+
 if auth_status:
     save_user(username)
     in_trial, abbonato = check_trial(username)
