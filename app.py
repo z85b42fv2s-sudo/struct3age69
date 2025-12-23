@@ -125,12 +125,11 @@ st.title("Structural 3age - Analisi Condizione Strutture")
 
 
 
-# Permetti inserimento manuale della chiave OpenAI dalla sidebar
-api_key = st.sidebar.text_input("🔑 OpenAI API Key", value=os.getenv("OPENAI_API_KEY") or "", type="password")
-if api_key:
-    st.sidebar.success("API Key impostata.")
-else:
-    st.sidebar.warning("Chiave OpenAI non trovata. Inseriscila qui sopra.")
+
+# Usa solo la variabile d'ambiente/secrets per la chiave OpenAI
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    st.sidebar.warning("Chiave OpenAI non trovata. Contatta l'amministratore.")
 
 # --- SEZIONE 1: Dati Generali ---
 st.header("1. Dati Generali della Struttura")
