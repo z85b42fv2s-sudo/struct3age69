@@ -75,23 +75,27 @@ authenticator = stauth.Authenticate(
 
 
 # La funzione login restituisce None se location è diverso da 'unrendered'.
-authenticator.login(location="sidebar")
+login_result = authenticator.login(location="sidebar")
 
-if authenticator.authentication_status:
-    save_user(authenticator.username)
-    in_trial, abbonato = check_trial(authenticator.username)
+# Recupera lo stato di autenticazione e username dalla classe (compatibile con le versioni recenti)
+auth_status = getattr(authenticator, "authentication_status", None)
+username = getattr(authenticator, "username", None)
+
+if auth_status:
+    save_user(username)
+    in_trial, abbonato = check_trial(username)
     if not in_trial:
         st.error(f"Il periodo di prova gratuita è terminato. Abbonati per continuare a usare l'applicazione.")
         st.info("Clicca qui sotto per abbonarti:")
         st.markdown(f"<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button>Abbonati a €9,90/mese</button></a>", unsafe_allow_html=True)
         st.stop()
     elif not abbonato:
-        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(load_users()[load_users()["email"] == authenticator.username].iloc[0]["data_registrazione"], "%Y-%m-%d")).days
+        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(load_users()[load_users()["email"] == username].iloc[0]["data_registrazione"], "%Y-%m-%d")).days
         st.info(f"Periodo di prova attivo. Giorni rimanenti: {days_left}")
-elif authenticator.authentication_status is False:
+elif auth_status is False:
     st.error("Username/password errati")
     st.stop()
-elif authenticator.authentication_status is None:
+elif auth_status is None:
     st.warning("Inserisci username e password")
     st.stop()
 
