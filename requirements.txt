@@ -4,3 +4,4 @@ stripe
 python-dotenv
 pandas
 openai
+fpdf
