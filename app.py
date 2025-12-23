@@ -60,7 +60,8 @@ credentials = {
         "demo@demo.it": {
             "email": "demo@demo.it",
             "name": "Demo User",
-            "password": stauth.Hasher(["demo123"]).generate()[0]
+            # Hash generata per la password 'demo123'
+            "password": "$2b$12$6EQF.P8dAampjj/hnxqI0OwUJOaExqqdVxyHoEg215SJmv37Z/yp6"
         }
     }
 }
