@@ -1,5 +1,13 @@
 import base64
+import os
 from openai import OpenAI
+
+# Recupera la chiave API e il project_id dalle variabili d'ambiente
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_PROJECT = os.getenv("OPENAI_PROJECT")
+
+# Crea il client OpenAI con project_id (per chiavi sk-proj-...)
+client = OpenAI(api_key=OPENAI_API_KEY, project=OPENAI_PROJECT)
 import streamlit as st
 
 def encode_image(image_file):
