@@ -18,17 +18,12 @@ st.cache_resource.clear()
 # Force reload regulation_handler to get latest code
 importlib.reload(regulation_handler)
 
-# Carica variabili d'ambiente dal file .env
-load_dotenv(override=True)
-# Forza la variabile d'ambiente anche se già presente
-with open('.env', 'r', encoding='utf-8') as f:
-    for line in f:
-        if line.strip().startswith('OPENAI_API_KEY='):
-            key = line.strip().split('=', 1)[1]
-            os.environ['OPENAI_API_KEY'] = key
-        if line.strip().startswith('OPENAI_PROJECT='):
-            project = line.strip().split('=', 1)[1]
-            os.environ['OPENAI_PROJECT'] = project
+
+# Carica variabili d'ambiente dal file .env solo in locale (se presente)
+try:
+    load_dotenv(override=True)
+except Exception:
+    pass
 
 USERS_FILE = "users.csv"
 TRIAL_DAYS = 3
