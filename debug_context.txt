@@ -1,0 +1,103 @@
+File: NTC-2018 - dm 17 gennaio 2018.pdf (Pag. 89)
+Text snippet: —  85  —
+Supplemento ordinario n. 8 alla GAZZETTA UFFICIALE Serie generale - n. 4220-2-2018
+ 
+dove:  
+bt  rappresenta la larghezza media della zona tesa; per una trave a T con piattabanda compressa, n...
+
+File: NTC-2018 - dm 17 gennaio 2018.pdf (Pag. 241)
+Text snippet: —  237  —
+Supplemento ordinario n. 8 alla GAZZETTA UFFICIALE Serie generale - n. 4220-2-2018
+ 
+La parte dell’armatura longitudinale della trave che si ancora oltre il nodo non può terminare all’intern...
+
+File: circolare-ntc2018-cap8.pdf (Pag. 43)
+Text snippet: —  291  —
+Supplemento ordinario n. 5 alla GAZZETTA UFFICIALE Serie generale - n. 3511-2-2019
+ 
+ 
+[C8.7.4.6]
+ 
+dove /g85s è il rapporto volumetrico di armatura trasversale, pari a /g85s = 2 ( b+h) ts /...
+
+File: NTC-2018 - dm 17 gennaio 2018.pdf (Pag. 217)
+Text snippet: —  213  —
+Supplemento ordinario n. 8 alla GAZZETTA UFFICIALE Serie generale - n. 4220-2-2018
+ 
+In assenza di più accurate valutazioni, la domanda sismica agente per la presenza di un impianto sul pann...
+
+File: 2.4 Costruzioni in c.a. - Criteri di Analisi e di Verifica.pdf (Pag. 35)
+Text snippet: ( ) ( )
+( ) ( )dc
+yw
+sx f
+f
+v
+c
+e
+u
+h
+Lf
+ρ
+
+
+
+
+αρ
+ν
+
+
+
+
+
+
+
+
+
+ω
+ω′
+γ=θ
+100
+35.0225.0
+25.125;01.0max
+;01.0max3.0016.01
+35
+Formula sperimentale alternativa (NTC 2018 C8.7.2.3.2.)
+forz...
+
+File: circolare-ntc2018-cap8.pdf (Pag. 33)
+Text snippet: —  281  —
+Supplemento ordinario n. 5 alla GAZZETTA UFFICIALE Serie generale - n. 3511-2-2019
+ 
+taglio si calcola in corrispondenza di dmax 
+d. se dmax>dcu, la domanda in termini di sollecitazione di t...
+
+File: circolare-ntc2018-cap8.pdf (Pag. 35)
+Text snippet: —  283  —
+Supplemento ordinario n. 5 alla GAZZETTA UFFICIALE Serie generale - n. 3511-2-2019
+ 
+ [C8.7.2.7a] 
+per pareti 
+ 
+[C8.7.2.7b] 
+dove /g73y è la curvatura al raggiungimento della tensione di sn...
+
+File: NTC-2018 - dm 17 gennaio 2018.pdf (Pag. 242)
+Text snippet: —  238  —
+Supplemento ordinario n. 8 alla GAZZETTA UFFICIALE Serie generale - n. 4220-2-2018
+ 
+In ogni caso alle estremità di tutti i pilastri primari, per una lunghezza pari a quella delle zone dissi...
+
+File: NTC-2018 - dm 17 gennaio 2018.pdf (Pag. 243)
+Text snippet: —  239  —
+Supplemento ordinario n. 8 alla GAZZETTA UFFICIALE Serie generale - n. 4220-2-2018
+ 
+Armature inclinate  
+Le armature inclinate che attraversano potenziali superfici di scorrimento devono es...
+
+File: circolare-ntc2018-cap8.pdf (Pag. 3)
+Text snippet: —  251  —
+Supplemento ordinario n. 5 alla GAZZETTA UFFICIALE Serie generale - n. 3511-2-2019
+ 
+Attenzione deve essere, dedicata alla individuazione, per quanto possibile, di situazioni critiche locali...
+

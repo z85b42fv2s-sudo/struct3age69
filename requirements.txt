@@ -1,0 +1,5 @@
+streamlit
+streamlit-authenticator
+stripe
+python-dotenv
+pandas
