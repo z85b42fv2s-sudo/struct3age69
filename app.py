@@ -6,6 +6,7 @@ import logic
 import ai_handler
 import report_generator
 import regulation_handler
+
 import os
 from dotenv import load_dotenv
 import importlib
@@ -18,13 +19,22 @@ st.cache_resource.clear()
 importlib.reload(regulation_handler)
 
 # Carica variabili d'ambiente dal file .env
+load_dotenv(override=True)
+# Forza la variabile d'ambiente anche se già presente
+with open('.env', 'r', encoding='utf-8') as f:
+    for line in f:
+        if line.strip().startswith('OPENAI_API_KEY='):
+            key = line.strip().split('=', 1)[1]
+            os.environ['OPENAI_API_KEY'] = key
+        if line.strip().startswith('OPENAI_PROJECT='):
+            project = line.strip().split('=', 1)[1]
+            os.environ['OPENAI_PROJECT'] = project
+
 USERS_FILE = "users.csv"
 TRIAL_DAYS = 3
 SUBSCRIPTION_PRICE = 9.90
 STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
 STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
-# Carica variabili d'ambiente dal file .env
-load_dotenv(override=True)
 
 st.set_page_config(page_title="Structural 3age", layout="wide")
 
@@ -118,14 +128,14 @@ elif authentication_status is None:
 st.title("Structural 3age - Analisi Condizione Strutture")
 
 
-# Gestione sicura della chiave OpenAI: solo da variabili d'ambiente/secrets
-api_key = os.getenv("OPENAI_API_KEY")
 
-# DEBUG: Mostra la chiave API effettivamente letta
-st.sidebar.info(f"DEBUG: API Key in uso: {str(api_key)[:12]}..." if api_key else "DEBUG: Nessuna API Key trovata")
 
-if not api_key:
-    st.sidebar.warning("Chiave OpenAI non trovata. Contatta l'amministratore.")
+# Permetti inserimento manuale della chiave OpenAI dalla sidebar
+api_key = st.sidebar.text_input("🔑 OpenAI API Key", value=os.getenv("OPENAI_API_KEY") or "", type="password")
+if api_key:
+    st.sidebar.success("API Key impostata.")
+else:
+    st.sidebar.warning("Chiave OpenAI non trovata. Inseriscila qui sopra.")
 
 # --- SEZIONE 1: Dati Generali ---
 st.header("1. Dati Generali della Struttura")
