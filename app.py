@@ -117,8 +117,12 @@ elif authentication_status is None:
 
 st.title("Structural 3age - Analisi Condizione Strutture")
 
+
 # Gestione sicura della chiave OpenAI: solo da variabili d'ambiente/secrets
 api_key = os.getenv("OPENAI_API_KEY")
+
+# DEBUG: Mostra la chiave API effettivamente letta
+st.sidebar.info(f"DEBUG: API Key in uso: {str(api_key)[:12]}..." if api_key else "DEBUG: Nessuna API Key trovata")
 
 if not api_key:
     st.sidebar.warning("Chiave OpenAI non trovata. Contatta l'amministratore.")
