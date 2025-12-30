@@ -151,17 +151,22 @@ st.sidebar.info("Hai già un account? Effettua il login nella sezione sopra.")
 
 st.sidebar.markdown("---")
 
+
 if authentication_status:
+    # Registra sempre il nuovo utente al primo login
     save_user(username)
     in_trial, abbonato = check_trial(username)
-    if not in_trial:
+    if abbonato:
+        st.success("Abbonamento attivo! Puoi usare tutte le funzionalità.")
+    elif in_trial:
+        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(load_users()[load_users()["email"] == username].iloc[0]["data_registrazione"], "%Y-%m-%d")).days
+        st.info(f"Periodo di prova attivo. Giorni rimanenti: {days_left}")
+        st.warning("Al termine della prova gratuita sarà necessario abbonarsi per continuare.")
+    else:
         st.error(f"Il periodo di prova gratuita è terminato. Abbonati per continuare a usare l'applicazione.")
         st.info("Clicca qui sotto per abbonarti:")
         st.markdown(f"<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button>Abbonati a €9,90/mese</button></a>", unsafe_allow_html=True)
         st.stop()
-    elif not abbonato:
-        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(load_users()[load_users()["email"] == username].iloc[0]["data_registrazione"], "%Y-%m-%d")).days
-        st.info(f"Periodo di prova attivo. Giorni rimanenti: {days_left}")
 elif authentication_status is False:
     st.error("Username/password errati")
     st.stop()
