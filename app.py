@@ -1,3 +1,9 @@
+from pathlib import Path
+# Visualizza il file di verifica Google se presente
+verification_file = "googlea850bad541d5794f.html"
+if Path(verification_file).exists():
+    with open(verification_file, "r") as f:
+        st.markdown(f.read(), unsafe_allow_html=True)
 import streamlit as st
 import streamlit_authenticator as stauth
 import pandas as pd
