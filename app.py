@@ -119,9 +119,27 @@ st.sidebar.header("📝 Iscriviti / Abbonati")
 st.sidebar.write("""
 Accedi a tutte le funzionalità avanzate dell'app con l'abbonamento mensile. Dopo la prova gratuita, potrai continuare solo se abbonato.
 """)
-st.sidebar.markdown("""
-<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>
-""", unsafe_allow_html=True)
+
+# Mostra il bottone Stripe solo se la prova è scaduta e l'utente non è abbonato
+show_stripe = False
+if authentication_status:
+    save_user(username)
+    in_trial, abbonato = check_trial(username)
+    user_row = load_users()[load_users()["email"] == username]
+    reg_date = user_row.iloc[0]["data_registrazione"] if not user_row.empty else "-"
+    abbo = user_row.iloc[0]["abbonato"] if not user_row.empty else False
+    days_left = None
+    if not user_row.empty:
+        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(reg_date, "%Y-%m-%d")).days
+    if not abbonato and (days_left is not None and days_left <= 0):
+        show_stripe = True
+else:
+    show_stripe = True  # Mostra sempre se non loggato
+
+if show_stripe:
+    st.sidebar.markdown("""
+    <a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>
+    """, unsafe_allow_html=True)
 st.sidebar.info("Hai già un account? Effettua il login nella sezione sopra.")
 
 st.sidebar.markdown("---")
