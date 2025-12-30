@@ -56,18 +56,22 @@ STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
 STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
 
 
+
 st.set_page_config(
     page_title="Structure3Age",
     page_icon="🧱",
     layout="wide"
 )
 
-# Meta tag Google Search Console
-st.markdown(
+# Meta tag Google Search Console (iniettato con component)
+import streamlit.components.v1 as components
+components.html(
     """
-    <meta name="google-site-verification" content="D-2hzr1YwD7pGFy_0r30wH3TuUFqkSpmXooJbX0_RlI" />
+    <head>
+        <meta name=\"google-site-verification\" content=\"D-2hzr1YwD7pGFy_0r30wH3TuUFqkSpmXooJbX0_RlI\" />
+    </head>
     """,
-    unsafe_allow_html=True
+    height=0
 )
 
 # --- AUTENTICAZIONE UTENTE ---
