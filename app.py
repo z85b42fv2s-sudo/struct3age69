@@ -156,12 +156,23 @@ if authentication_status:
     # Registra sempre il nuovo utente al primo login
     save_user(username)
     in_trial, abbonato = check_trial(username)
+    user_row = load_users()[load_users()["email"] == username]
+    reg_date = user_row.iloc[0]["data_registrazione"] if not user_row.empty else "-"
+    abbo = user_row.iloc[0]["abbonato"] if not user_row.empty else False
+    days_left = None
+    if not user_row.empty:
+        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(reg_date, "%Y-%m-%d")).days
+
+    # DEBUG VISIBILE IN SIDEBAR
+    st.sidebar.markdown("---")
+    st.sidebar.info(f"**DEBUG UTENTE**\nEmail: {username}\nRegistrato: {reg_date}\nAbbonato: {abbo}\nGiorni prova rimasti: {days_left if days_left is not None and days_left > 0 else 0}")
+    st.sidebar.markdown("---")
+
     if abbonato:
         st.success("Abbonamento attivo! Puoi usare tutte le funzionalità.")
     elif in_trial:
-        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(load_users()[load_users()["email"] == username].iloc[0]["data_registrazione"], "%Y-%m-%d")).days
-        st.info(f"Periodo di prova attivo. Giorni rimanenti: {days_left}")
-        st.warning("Al termine della prova gratuita sarà necessario abbonarsi per continuare.")
+        st.info(f"Benvenuto! Hai una prova gratuita attiva. Giorni rimanenti: {days_left if days_left is not None and days_left > 0 else 0}")
+        st.warning("Al termine della prova gratuita sarà necessario abbonarsi per continuare.\n\n**Non serve inserire dati di pagamento per la prova gratuita!**")
     else:
         st.error(f"Il periodo di prova gratuita è terminato. Abbonati per continuare a usare l'applicazione.")
         st.info("Clicca qui sotto per abbonarti:")
