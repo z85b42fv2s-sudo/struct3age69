@@ -22,9 +22,19 @@ importlib.reload(regulation_handler)
 # --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
 def pagina_iscrizione_pagamento():
     st.title("Iscrizione e Pagamento")
-    st.write("Compila il modulo per iscriverti e abbonarti al servizio.")
+    st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. Nessun pagamento richiesto ora.")
     email = st.text_input("Email", "")
-    if st.button("Procedi al pagamento con Stripe"):
+    if st.button("Inizia la prova gratuita"):
+        if not email or "@" not in email:
+            st.error("Inserisci una email valida.")
+        else:
+            save_user(email, abbonato=False)
+            st.success("Prova gratuita attivata! Puoi accedere con la tua email dalla pagina principale.")
+            st.info("Al termine della prova gratuita, ti verrà richiesto di abbonarti per continuare.")
+
+    st.markdown("---")
+    st.write("Se hai già terminato la prova gratuita o vuoi abbonarti subito:")
+    if st.button("Abbonati ora con Stripe"):
         if not email or "@" not in email:
             st.error("Inserisci una email valida.")
         else:
