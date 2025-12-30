@@ -21,7 +21,7 @@ importlib.reload(regulation_handler)
 
 # --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
 def pagina_iscrizione_pagamento():
-    st.title("Iscrizione e Pagamento")
+    st.title("Iscrizione e Prova Gratuita")
     st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. Nessun pagamento richiesto ora.")
     email = st.text_input("Email", "")
     if st.button("Inizia la prova gratuita"):
@@ -32,34 +32,9 @@ def pagina_iscrizione_pagamento():
             st.success("Prova gratuita attivata! Puoi accedere con la tua email dalla pagina principale.")
             st.info("Al termine della prova gratuita, ti verrà richiesto di abbonarti per continuare.")
 
+    # Il pagamento Stripe viene mostrato solo DOPO la prova gratuita (gestito nella pagina principale)
     st.markdown("---")
-    st.write("Se hai già terminato la prova gratuita o vuoi abbonarti subito:")
-    if st.button("Abbonati ora con Stripe"):
-        if not email or "@" not in email:
-            st.error("Inserisci una email valida.")
-        else:
-            try:
-                stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-                session = stripe.checkout.Session.create(
-                    payment_method_types=["card"],
-                    customer_email=email,
-                    line_items=[{
-                        "price_data": {
-                            "currency": "eur",
-                            "product_data": {"name": "Abbonamento Structural 3age"},
-                            "unit_amount": int(9.90 * 100),
-                            "recurring": {"interval": "month"}
-                        },
-                        "quantity": 1
-                    }],
-                    mode="subscription",
-                    success_url=os.getenv("SUCCESS_URL", "https://google.com"),
-                    cancel_url=os.getenv("CANCEL_URL", "https://google.com")
-                )
-                st.success("Verrai reindirizzato al pagamento...")
-                st.markdown(f"<a href='{session.url}' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Vai a Stripe</button></a>", unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"Errore nella creazione della sessione Stripe: {e}")
+    st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora.")
 
 # --- NAVIGAZIONE PAGINE ---
 pagina = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
