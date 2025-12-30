@@ -28,7 +28,7 @@ importlib.reload(regulation_handler)
 # --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
 def pagina_iscrizione_pagamento():
     st.title("Iscrizione e Prova Gratuita")
-    st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. Nessun pagamento richiesto ora.")
+    st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. **Non serve inserire dati di pagamento per la prova gratuita!**")
     email = st.text_input("Email", "")
     if st.button("Inizia la prova gratuita"):
         if not email or "@" not in email:
@@ -40,7 +40,7 @@ def pagina_iscrizione_pagamento():
 
     # Il pagamento Stripe viene mostrato solo DOPO la prova gratuita (gestito nella pagina principale)
     st.markdown("---")
-    st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora.")
+    st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
 
 # --- NAVIGAZIONE PAGINE ---
 pagina = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
@@ -143,7 +143,10 @@ st.sidebar.write("""
 Accedi a tutte le funzionalità avanzate dell'app con l'abbonamento mensile. Dopo la prova gratuita, potrai continuare solo se abbonato.
 """)
 
-# Mostra il bottone Stripe solo se la prova è scaduta e l'utente non è abbonato
+
+# Mostra il bottone Stripe SOLO se:
+# - l'utente è autenticato, NON è in prova gratuita, NON è abbonato
+# - oppure se non è autenticato (per invogliare l'iscrizione)
 show_stripe = False
 if authentication_status:
     save_user(username)
@@ -154,6 +157,7 @@ if authentication_status:
     days_left = None
     if not user_row.empty:
         days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(reg_date, "%Y-%m-%d")).days
+    # Mostra Stripe SOLO se NON in prova gratuita e NON abbonato
     if not abbonato and (days_left is not None and days_left <= 0):
         show_stripe = True
 else:
@@ -163,7 +167,7 @@ if show_stripe:
     st.sidebar.markdown("""
     <a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>
     """, unsafe_allow_html=True)
-st.sidebar.info("Hai già un account? Effettua il login nella sezione sopra.")
+    st.sidebar.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
 
 st.sidebar.markdown("---")
 
