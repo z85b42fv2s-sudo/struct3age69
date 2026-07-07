@@ -51,7 +51,13 @@ def pagina_iscrizione_pagamento():
         if not email or "@" not in email:
             st.error("Inserisci una email valida.")
         else:
-            save_user(email, abbonato=False)
+            # Protezione: se per qualche motivo la funzione save_user non è disponibile
+            # (ad esempio deploy non aggiornato), mostriamo un messaggio chiaro invece di sollevare NameError.
+            if "save_user" in globals() and callable(globals().get("save_user")):
+                save_user(email, abbonato=False)
+            else:
+                st.error("Servizio non pronto: riprova fra pochi secondi o aggiorna il deploy (Rerun).")
+                return
             st.session_state.current_user_email = email.strip().lower()
             st.success("Prova gratuita attivata! Ora puoi usare subito la tua email dalla pagina principale.")
             st.info("Al termine della prova gratuita, ti verrà richiesto di abbonarti per continuare.")
@@ -61,16 +67,8 @@ def pagina_iscrizione_pagamento():
     st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
 
 # --- NAVIGAZIONE PAGINE ---
-pagina = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
-if pagina == "Iscrizione e Pagamento":
-    # Visualizza il file di verifica Google se presente e inietta il meta tag
-    verification_file = Path("googlea850bad541d5794f.html")
-    if verification_file.exists():
-        with open(verification_file, "r", encoding="utf-8") as f:
-            st.markdown(f.read(), unsafe_allow_html=True)
-    st.sidebar.info("Usa la pagina principale per accedere o attivare la prova gratuita.")
-    pagina_iscrizione_pagamento()
-    st.stop()
+# Mostro il selettore subito, ma rimando la chiamata della pagina
+selected_page = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
 
 components.html(
     """
@@ -118,6 +116,17 @@ def check_trial(email):
     abbonato = user.iloc[0]["abbonato"]
     in_trial = days_used < TRIAL_DAYS
     return in_trial or abbonato, abbonato
+
+# Se l'utente ha selezionato la pagina di iscrizione, renderizza la pagina ORA
+if 'selected_page' in globals() and selected_page == "Iscrizione e Pagamento":
+    # Visualizza il file di verifica Google se presente e inietta il meta tag
+    verification_file = Path("googlea850bad541d5794f.html")
+    if verification_file.exists():
+        with open(verification_file, "r", encoding="utf-8") as f:
+            st.markdown(f.read(), unsafe_allow_html=True)
+    st.sidebar.info("Usa la pagina principale per accedere o attivare la prova gratuita.")
+    pagina_iscrizione_pagamento()
+    st.stop()
 
 # --- ACCESSO / PROVA GRATUITA ---
 st.sidebar.markdown("---")
