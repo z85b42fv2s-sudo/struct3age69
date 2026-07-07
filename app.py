@@ -1,9 +1,4 @@
 from pathlib import Path
-# Visualizza il file di verifica Google se presente
-verification_file = "googlea850bad541d5794f.html"
-if Path(verification_file).exists():
-    with open(verification_file, "r") as f:
-        st.markdown(f.read(), unsafe_allow_html=True)
 import streamlit as st
 import streamlit_authenticator as stauth
 import pandas as pd
@@ -18,36 +13,19 @@ from dotenv import load_dotenv
 import importlib
 import stripe
 
+# Configurazione pagina Streamlit: deve essere la prima chiamata `st.*`
+st.set_page_config(
+    page_title="Structure3Age",
+    page_icon="🧱",
+    layout="wide"
+)
+
 # Force clear Streamlit cache to reload modules
 st.cache_resource.clear()
 
 
 # Force reload regulation_handler to get latest code
 importlib.reload(regulation_handler)
-
-# --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
-def pagina_iscrizione_pagamento():
-    st.title("Iscrizione e Prova Gratuita")
-    st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. **Non serve inserire dati di pagamento per la prova gratuita!**")
-    email = st.text_input("Email", "")
-    if st.button("Inizia la prova gratuita"):
-        if not email or "@" not in email:
-            st.error("Inserisci una email valida.")
-        else:
-            save_user(email, abbonato=False)
-            st.success("Prova gratuita attivata! Puoi accedere con la tua email dalla pagina principale.")
-            st.info("Al termine della prova gratuita, ti verrà richiesto di abbonarti per continuare.")
-
-    # Il pagamento Stripe viene mostrato solo DOPO la prova gratuita (gestito nella pagina principale)
-    st.markdown("---")
-    st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
-
-# --- NAVIGAZIONE PAGINE ---
-pagina = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
-if pagina == "Iscrizione e Pagamento":
-    pagina_iscrizione_pagamento()
-    st.stop()
-
 
 # Carica variabili d'ambiente dal file .env solo in locale (se presente)
 try:
@@ -61,16 +39,39 @@ SUBSCRIPTION_PRICE = 9.90
 STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
 STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
 
-
-
-st.set_page_config(
-    page_title="Structure3Age",
-    page_icon="🧱",
-    layout="wide"
-)
-
 # Meta tag Google Search Console (iniettato con component)
 import streamlit.components.v1 as components
+
+# --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
+def pagina_iscrizione_pagamento():
+    st.title("Iscrizione e Prova Gratuita")
+    st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. **Non serve inserire dati di pagamento per la prova gratuita!**")
+    email = st.text_input("Email", "")
+    if st.button("Inizia la prova gratuita"):
+        if not email or "@" not in email:
+            st.error("Inserisci una email valida.")
+        else:
+            save_user(email, abbonato=False)
+            st.session_state.current_user_email = email.strip().lower()
+            st.success("Prova gratuita attivata! Ora puoi usare subito la tua email dalla pagina principale.")
+            st.info("Al termine della prova gratuita, ti verrà richiesto di abbonarti per continuare.")
+
+    # Il pagamento Stripe viene mostrato solo DOPO la prova gratuita (gestito nella pagina principale)
+    st.markdown("---")
+    st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
+
+# --- NAVIGAZIONE PAGINE ---
+pagina = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
+if pagina == "Iscrizione e Pagamento":
+    # Visualizza il file di verifica Google se presente e inietta il meta tag
+    verification_file = Path("googlea850bad541d5794f.html")
+    if verification_file.exists():
+        with open(verification_file, "r", encoding="utf-8") as f:
+            st.markdown(f.read(), unsafe_allow_html=True)
+    st.sidebar.info("Usa la pagina principale per accedere o attivare la prova gratuita.")
+    pagina_iscrizione_pagamento()
+    st.stop()
+
 components.html(
     """
     <head>
@@ -88,6 +89,8 @@ def load_users():
         if df.empty or not all(col in df.columns for col in ["email", "data_registrazione", "abbonato"]):
             df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
             df.to_csv(USERS_FILE, index=False)
+        else:
+            df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
         return df
     except Exception:
         df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
@@ -96,14 +99,18 @@ def load_users():
 
 def save_user(email, abbonato=False):
     df = load_users()
-    if email not in df["email"].values:
-        now = datetime.now().strftime("%Y-%m-%d")
+    email = email.strip().lower()
+    now = datetime.now().strftime("%Y-%m-%d")
+    if email in df["email"].astype(str).str.lower().values:
+        df.loc[df["email"].astype(str).str.lower() == email, ["data_registrazione", "abbonato"]] = [now, abbonato]
+    else:
         df = pd.concat([df, pd.DataFrame({"email": [email], "data_registrazione": [now], "abbonato": [abbonato]})], ignore_index=True)
-        df.to_csv(USERS_FILE, index=False)
+    df.to_csv(USERS_FILE, index=False)
 
 def check_trial(email):
     df = load_users()
-    user = df[df["email"] == email]
+    email = email.strip().lower()
+    user = df[df["email"].astype(str).str.lower() == email]
     if user.empty:
         return True, None
     reg_date = datetime.strptime(user.iloc[0]["data_registrazione"], "%Y-%m-%d")
@@ -112,78 +119,76 @@ def check_trial(email):
     in_trial = days_used < TRIAL_DAYS
     return in_trial or abbonato, abbonato
 
-# Configurazione utenti demo
-credentials = {
-    "usernames": {
-        "demo@demo.it": {
-            "email": "demo@demo.it",
-            "name": "Demo User",
-            # Hash generata per la password 'demo123'
-            "password": "$2b$12$6EQF.P8dAampjj/hnxqI0OwUJOaExqqdVxyHoEg215SJmv37Z/yp6"
-        }
-    }
-}
-
-authenticator = stauth.Authenticate(
-    credentials,
-    "struct3age69_cookie",
-    "struct3age69_key",
-    cookie_expiry_days=7
-)
-
-
-# La funzione login restituisce None se location è diverso da 'unrendered'.
-
-name, authentication_status, username = authenticator.login(location="sidebar")
-
-# --- SEZIONE ISCRIZIONE/ABBONAMENTO PUBBLICA ---
+# --- ACCESSO / PROVA GRATUITA ---
 st.sidebar.markdown("---")
-st.sidebar.header("📝 Iscriviti / Abbonati")
+st.sidebar.header("📝 Accedi / Prova Gratuita")
 st.sidebar.write("""
-Accedi a tutte le funzionalità avanzate dell'app con l'abbonamento mensile. Dopo la prova gratuita, potrai continuare solo se abbonato.
+Accedi con la tua email oppure avvia subito la prova gratuita di 3 giorni senza carta.
 """)
 
+if "current_user_email" not in st.session_state:
+    st.session_state.current_user_email = ""
 
-# Mostra il bottone Stripe SOLO se:
-# - l'utente è autenticato, NON è in prova gratuita, NON è abbonato
-# - oppure se non è autenticato (per invogliare l'iscrizione)
-show_stripe = False
+email_input = st.sidebar.text_input("Email", value=st.session_state.current_user_email, placeholder="nome@dominio.it")
+col_login, col_trial = st.sidebar.columns(2)
+
+if col_login.button("Accedi"):
+    email_norm = email_input.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        st.sidebar.error("Inserisci una email valida.")
+    else:
+        utenti = load_users()
+        if email_norm in utenti["email"].astype(str).str.lower().values:
+            st.session_state.current_user_email = email_norm
+            st.rerun()
+        else:
+            st.sidebar.error("Email non trovata. Usa 'Prova gratuita' per creare l'accesso.")
+
+if col_trial.button("Prova gratuita"):
+    email_norm = email_input.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        st.sidebar.error("Inserisci una email valida.")
+    else:
+        save_user(email_norm, abbonato=False)
+        st.session_state.current_user_email = email_norm
+        st.sidebar.success("Prova gratuita attivata.")
+        st.rerun()
+
+if st.session_state.current_user_email:
+    st.sidebar.success(f"Accesso attivo: {st.session_state.current_user_email}")
+    if st.sidebar.button("Esci"):
+        st.session_state.current_user_email = ""
+        st.rerun()
+
+username = st.session_state.current_user_email.strip().lower()
+authentication_status = bool(username)
+
 if authentication_status:
     save_user(username)
     in_trial, abbonato = check_trial(username)
-    user_row = load_users()[load_users()["email"] == username]
+    user_row = load_users()[load_users()["email"].astype(str).str.lower() == username]
     reg_date = user_row.iloc[0]["data_registrazione"] if not user_row.empty else "-"
     abbo = user_row.iloc[0]["abbonato"] if not user_row.empty else False
     days_left = None
     if not user_row.empty:
         days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(reg_date, "%Y-%m-%d")).days
-    # Mostra Stripe SOLO se NON in prova gratuita e NON abbonato
+
     if not abbonato and (days_left is not None and days_left <= 0):
-        show_stripe = True
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>", unsafe_allow_html=True)
+        st.sidebar.info("La prova gratuita è finita: ora serve un abbonamento per continuare.")
+    elif in_trial:
+        st.sidebar.info(f"Prova gratuita attiva. Giorni rimanenti: {days_left if days_left is not None and days_left > 0 else 0}")
+    else:
+        st.sidebar.info("Abbonamento attivo.")
+
+    st.sidebar.markdown("---")
+
 else:
-    show_stripe = True  # Mostra sempre se non loggato
-
-if show_stripe:
-    st.sidebar.markdown("""
-    <a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>
-    """, unsafe_allow_html=True)
-    st.sidebar.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
-
-st.sidebar.markdown("---")
-
+    st.info("Inserisci la tua email nella sidebar per accedere o attivare la prova gratuita.")
+    st.stop()
 
 if authentication_status:
-    # Registra sempre il nuovo utente al primo login
-    save_user(username)
-    in_trial, abbonato = check_trial(username)
-    user_row = load_users()[load_users()["email"] == username]
-    reg_date = user_row.iloc[0]["data_registrazione"] if not user_row.empty else "-"
-    abbo = user_row.iloc[0]["abbonato"] if not user_row.empty else False
-    days_left = None
-    if not user_row.empty:
-        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(reg_date, "%Y-%m-%d")).days
-
-    # DEBUG VISIBILE IN SIDEBAR
     st.sidebar.markdown("---")
     st.sidebar.info(f"**DEBUG UTENTE**\nEmail: {username}\nRegistrato: {reg_date}\nAbbonato: {abbo}\nGiorni prova rimasti: {days_left if days_left is not None and days_left > 0 else 0}")
     st.sidebar.markdown("---")
@@ -192,18 +197,10 @@ if authentication_status:
         st.success("Abbonamento attivo! Puoi usare tutte le funzionalità.")
     elif in_trial:
         st.info(f"Benvenuto! Hai una prova gratuita attiva. Giorni rimanenti: {days_left if days_left is not None and days_left > 0 else 0}")
-        st.warning("Al termine della prova gratuita sarà necessario abbonarsi per continuare.\n\n**Non serve inserire dati di pagamento per la prova gratuita!**")
+        st.success("Non serve inserire dati di pagamento per la prova gratuita.")
     else:
-        st.error(f"Il periodo di prova gratuita è terminato. Abbonati per continuare a usare l'applicazione.")
-        st.info("Clicca qui sotto per abbonarti:")
-        st.markdown(f"<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button>Abbonati a €9,90/mese</button></a>", unsafe_allow_html=True)
+        st.error("Il periodo di prova gratuita è terminato. Abbonati per continuare a usare l'applicazione.")
         st.stop()
-elif authentication_status is False:
-    st.error("Username/password errati")
-    st.stop()
-elif authentication_status is None:
-    st.warning("Inserisci username e password")
-    st.stop()
 
 st.title("Structural 3age - Analisi Condizione Strutture")
 
