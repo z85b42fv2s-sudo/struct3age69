@@ -1,0 +1,4 @@
+# Escludi file di ambiente e cache
+.env
+__pycache__/
+*.pyc

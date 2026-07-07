@@ -1,2 +1,3 @@
-email,data_registrazione,abbonato
-demo@demo.it,2025-12-23,True
+email,data_registrazione,abbonato,verified,verification_code,verification_expires
+demo@demo.it,2025-12-23,True,True,,
+testuser@example.com,2026-07-07,False,False,,

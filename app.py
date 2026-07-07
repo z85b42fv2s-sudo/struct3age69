@@ -83,26 +83,47 @@ components.html(
 def load_users():
     try:
         df = pd.read_csv(USERS_FILE)
-        # Se il file è vuoto o non ha le colonne giuste, ricrea l'intestazione
-        if df.empty or not all(col in df.columns for col in ["email", "data_registrazione", "abbonato"]):
-            df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
+        # Ensure required columns exist; if not, recreate with full schema
+        required = ["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"]
+        if df.empty or not all(col in df.columns for col in required):
+            # preserve existing emails if present
+            emails = df["email"].tolist() if "email" in df.columns else []
+            df = pd.DataFrame(columns=required)
+            for e in emails:
+                df = pd.concat([df, pd.DataFrame({"email": [e], "data_registrazione": [datetime.now().strftime("%Y-%m-%d")], "abbonato": [False], "verified": [False], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
             df.to_csv(USERS_FILE, index=False)
-        else:
-            df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
+        # normalize text columns so OTPs are never treated as numbers by pandas
+        for col in ["email", "data_registrazione", "verification_code", "verification_expires"]:
+            if col in df.columns:
+                df[col] = df[col].fillna("").astype(str)
+                df[col] = df[col].replace({"nan": "", "None": ""})
+        if "verification_code" in df.columns:
+            df["verification_code"] = df["verification_code"].apply(
+                lambda value: value[:-2] if isinstance(value, str) and value.endswith(".0") and value[:-2].isdigit() else value
+            )
+        # normalize boolean columns
+        df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
+        if "verified" in df.columns:
+            df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
         return df
     except Exception:
-        df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato"])
+        df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"])
         df.to_csv(USERS_FILE, index=False)
         return df
 
-def save_user(email, abbonato=False):
+def save_user(email, abbonato=False, verified=False):
     df = load_users()
     email = email.strip().lower()
     now = datetime.now().strftime("%Y-%m-%d")
     if email in df["email"].astype(str).str.lower().values:
-        df.loc[df["email"].astype(str).str.lower() == email, ["data_registrazione", "abbonato"]] = [now, abbonato]
+        idx = df[df["email"].astype(str).str.lower() == email].index[0]
+        df.at[idx, "data_registrazione"] = now
+        df.at[idx, "abbonato"] = abbonato
+        # preserve verified unless explicitly True
+        if verified:
+            df.at[idx, "verified"] = True
     else:
-        df = pd.concat([df, pd.DataFrame({"email": [email], "data_registrazione": [now], "abbonato": [abbonato]})], ignore_index=True)
+        df = pd.concat([df, pd.DataFrame({"email": [email], "data_registrazione": [now], "abbonato": [abbonato], "verified": [verified], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
     df.to_csv(USERS_FILE, index=False)
 
 def check_trial(email):
@@ -116,6 +137,102 @@ def check_trial(email):
     abbonato = user.iloc[0]["abbonato"]
     in_trial = days_used < TRIAL_DAYS
     return in_trial or abbonato, abbonato
+
+
+# ------------------ OTP / Email helpers ------------------
+import random
+import smtplib
+from email.message import EmailMessage
+
+def get_secret(key):
+    if hasattr(st, "secrets") and key in st.secrets:
+        return st.secrets[key]
+    return os.getenv(key)
+
+def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
+    host = get_secret("SMTP_HOST")
+    port = int(get_secret("SMTP_PORT") or 587)
+    user = get_secret("SMTP_USER")
+    password = get_secret("SMTP_PASSWORD")
+    from_addr = get_secret("EMAIL_FROM")
+
+    # fallback: test mode -> show code in sidebar
+    if not all([host, port, user, password, from_addr]):
+        st.sidebar.info(f"[TEST MODE] Email to {to_email}: {subject} -- {body}")
+        return True
+
+    msg = EmailMessage()
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as smtp:
+            smtp.starttls()
+            smtp.login(user, password)
+            smtp.send_message(msg)
+        return True
+    except Exception as e:
+        st.error("Errore invio email: " + str(e))
+        return False
+
+
+def generate_otp():
+    return f"{random.randint(0, 999999):06d}"
+
+def set_verification_code(email, minutes=10):
+    # create or update user with a verification code and expiry
+    df = load_users()
+    email = email.strip().lower()
+    now = datetime.now()
+    expires = (now + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S")
+    code = generate_otp()
+    if email in df["email"].astype(str).str.lower().values:
+        idx = df[df["email"].astype(str).str.lower() == email].index[0]
+        df.at[idx, "verification_code"] = code
+        df.at[idx, "verification_expires"] = expires
+        df.at[idx, "verified"] = False
+    else:
+        df = pd.concat([df, pd.DataFrame({
+            "email": [email],
+            "data_registrazione": [now.strftime("%Y-%m-%d")],
+            "abbonato": [False],
+            "verified": [False],
+            "verification_code": [code],
+            "verification_expires": [expires]
+        })], ignore_index=True)
+    df.to_csv(USERS_FILE, index=False)
+    return code, expires
+
+
+def verify_otp(email, code):
+    df = load_users()
+    email = email.strip().lower()
+    user = df[df["email"].astype(str).str.lower() == email]
+    if user.empty:
+        return False, "Email non trovata"
+    stored = str(user.iloc[0]["verification_code"]).strip()
+    expires = user.iloc[0]["verification_expires"]
+    if not stored:
+        return False, "Nessun codice inviato. Richiedi un nuovo codice."
+    try:
+        exp_dt = datetime.strptime(expires, "%Y-%m-%dT%H:%M:%S")
+    except Exception:
+        return False, "Codice non valido. Richiedi nuovo codice."
+    if datetime.now() > exp_dt:
+        return False, "Codice scaduto. Richiedi un nuovo codice."
+    if code.strip() != stored:
+        return False, "Codice errato."
+    # OK -> mark verified and clear code
+    idx = df[df["email"].astype(str).str.lower() == email].index[0]
+    df.at[idx, "verified"] = True
+    df.at[idx, "verification_code"] = ""
+    df.at[idx, "verification_expires"] = ""
+    df.to_csv(USERS_FILE, index=False)
+    return True, "Email verificata"
+
+# ------------------ end OTP helpers ------------------
 
 # Se l'utente ha selezionato la pagina di iscrizione, renderizza la pagina ORA
 if 'selected_page' in globals() and selected_page == "Iscrizione e Pagamento":
@@ -147,21 +264,30 @@ if col_login.button("Accedi"):
         st.sidebar.error("Inserisci una email valida.")
     else:
         utenti = load_users()
-        if email_norm in utenti["email"].astype(str).str.lower().values:
+        user_row = utenti[utenti["email"].astype(str).str.lower() == email_norm]
+        if not user_row.empty and bool(user_row.iloc[0].get("verified", False)):
             st.session_state.current_user_email = email_norm
             st.rerun()
+        elif not user_row.empty:
+            st.sidebar.warning("Email presente ma non verificata. Richiedi il codice OTP e completa la verifica.")
         else:
-            st.sidebar.error("Email non trovata. Usa 'Prova gratuita' per creare l'accesso.")
+            st.sidebar.error("Email non trovata. Usa 'Prova gratuita' per creare l'accesso e verificare l'email.")
 
 if col_trial.button("Prova gratuita"):
     email_norm = email_input.strip().lower()
     if not email_norm or "@" not in email_norm:
         st.sidebar.error("Inserisci una email valida.")
     else:
-        save_user(email_norm, abbonato=False)
-        st.session_state.current_user_email = email_norm
-        st.sidebar.success("Prova gratuita attivata.")
-        st.rerun()
+        # Start OTP flow: generate code, save and send
+        code, expires = set_verification_code(email_norm)
+        subject = "Codice di verifica Structure3Age"
+        body = f"Il tuo codice di verifica è: {code} (valido fino alle {expires})"
+        sent = send_email_smtp(email_norm, subject, body)
+        st.session_state['otp_last_sent'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        if sent:
+            st.sidebar.success("Codice di verifica inviato. Controlla la tua email (o la sidebar in test mode) e poi inserisci il codice per entrare.")
+        else:
+            st.sidebar.error("Errore invio codice. Riprova più tardi.")
 
 if st.session_state.current_user_email:
     st.sidebar.success(f"Accesso attivo: {st.session_state.current_user_email}")
@@ -169,13 +295,55 @@ if st.session_state.current_user_email:
         st.session_state.current_user_email = ""
         st.rerun()
 
-username = st.session_state.current_user_email.strip().lower()
-authentication_status = bool(username)
+# OTP verify input
+otp_code = st.sidebar.text_input("Codice verifica (OTP)", key="otp_code")
+if st.sidebar.button("Verifica codice"):
+    email_norm = st.session_state.current_user_email or email_input.strip().lower()
+    if not email_norm:
+        st.sidebar.error("Inserisci l'email prima di verificare il codice.")
+    else:
+        ok, msg = verify_otp(email_norm, otp_code)
+        if ok:
+            st.sidebar.success(msg)
+            st.session_state.current_user_email = email_norm
+            st.rerun()
+        else:
+            st.sidebar.error(msg)
 
+# Resend button (rate limited)
+if st.sidebar.button("Reinvia codice"):
+    email_norm = email_input.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        st.sidebar.error("Inserisci una email valida.")
+    else:
+        last = st.session_state.get('otp_last_sent')
+        if last:
+            try:
+                last_dt = datetime.strptime(last, "%Y-%m-%dT%H:%M:%S")
+                if (datetime.now() - last_dt).total_seconds() < 60:
+                    st.sidebar.error("Attendi prima di richiedere un nuovo codice (60s).")
+                    st.stop()
+            except Exception:
+                pass
+        code, expires = set_verification_code(email_norm)
+        subject = "Codice di verifica Structure3Age"
+        body = f"Il tuo codice di verifica è: {code} (valido fino alle {expires})"
+        sent = send_email_smtp(email_norm, subject, body)
+        st.session_state['otp_last_sent'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        if sent:
+            st.sidebar.success("Codice reinviato. Controlla la tua email (o la sidebar in test mode).")
+        else:
+            st.sidebar.error("Errore invio codice. Riprova più tardi.")
+
+username = st.session_state.current_user_email.strip().lower()
+user_row = load_users()[load_users()["email"].astype(str).str.lower() == username] if username else pd.DataFrame()
+authentication_status = bool(username) and not user_row.empty and bool(user_row.iloc[0].get("verified", False))
+
+# Do NOT auto-create/save users here. Users are created explicitly via signup or
+# when requesting a verification code (`set_verification_code`) so we avoid
+# accidental registrations just by typing an email in the input.
 if authentication_status:
-    save_user(username)
     in_trial, abbonato = check_trial(username)
-    user_row = load_users()[load_users()["email"].astype(str).str.lower() == username]
     reg_date = user_row.iloc[0]["data_registrazione"] if not user_row.empty else "-"
     abbo = user_row.iloc[0]["abbonato"] if not user_row.empty else False
     days_left = None
