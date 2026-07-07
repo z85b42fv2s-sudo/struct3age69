@@ -46,7 +46,7 @@ import streamlit.components.v1 as components
 def pagina_iscrizione_pagamento():
     st.title("Iscrizione e Prova Gratuita")
     st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. **Non serve inserire dati di pagamento per la prova gratuita!**")
-    email = st.text_input("Email", "")
+    email = st.text_input("Email", "", key="signup_email")
     if st.button("Inizia la prova gratuita"):
         if not email or "@" not in email:
             st.error("Inserisci una email valida.")
@@ -129,7 +129,7 @@ Accedi con la tua email oppure avvia subito la prova gratuita di 3 giorni senza 
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
 
-email_input = st.sidebar.text_input("Email", value=st.session_state.current_user_email, placeholder="nome@dominio.it")
+email_input = st.sidebar.text_input("Email", value=st.session_state.current_user_email, placeholder="nome@dominio.it", key="sidebar_email")
 col_login, col_trial = st.sidebar.columns(2)
 
 if col_login.button("Accedi"):
