@@ -796,7 +796,7 @@ report_data = {
     "localita": localita_input,
 }
 
-    pdf_bytes = report_generator.generate_pdf(report_data, descrizione, files_to_use, final_synthesis, interventi_ai)
+pdf_bytes = report_generator.generate_pdf(report_data, descrizione, files_to_use, final_synthesis, interventi_ai)
 
 st.download_button(
     label="📥 Scarica Report PDF",
