@@ -137,40 +137,69 @@ def estimate_intervention_costs(analysis_text, api_key, project_id=None, context
     """
     client = OpenAI(api_key=api_key, project=project_id)
 
-    context_lines = []
-    if context_data:
-        dati_generali = context_data.get("dati_generali", {}) or {}
-        vulnerabilita_attese = context_data.get("vulnerabilita_attese", {}) or {}
-        context_lines.append("DATI GENERALI:")
-        context_lines.append(f"- Materiale: {dati_generali.get('materiale', 'N/D')}")
-        context_lines.append(f"- Anno: {dati_generali.get('anno', 'N/D')}")
-        context_lines.append(f"- Zona sismica: {dati_generali.get('zona_sismica', 'N/D')}")
-        context_lines.append(f"- Terreno: {dati_generali.get('terreno', 'N/D')}")
-        context_lines.append(f"- Topografia: {dati_generali.get('topografia', 'N/D')}")
-        context_lines.append(f"- Comune/CAP: {dati_generali.get('comune_cap', 'N/D')}")
-        context_lines.append("")
-        context_lines.append("VULNERABILITA' ATTESE:")
-        context_lines.append(f"- Normativa probabile: {vulnerabilita_attese.get('normativa_probabile', 'N/D')}")
-        for voce in vulnerabilita_attese.get("vulnerabilita_attese", []) or []:
-            context_lines.append(f"- {voce}")
+    def _build_context_block():
+        context_lines = []
 
-    if final_synthesis:
-        context_lines.append("")
-        context_lines.append("SINTESI FINALE:")
-        context_lines.append(f"- Quadro sintetico: {final_synthesis.get('quadro_sintetico', 'N/D')}")
-        context_lines.append(f"- Indizio di attenzione: {final_synthesis.get('indizio_attenzione', 'N/D')}")
-        context_lines.append(f"- Motivazione: {final_synthesis.get('motivazione_indizio', 'N/D')}")
-        for passo in final_synthesis.get("prossimi_passi", []) or []:
-            context_lines.append(f"- Prossimo passo: {passo}")
+        if context_data:
+            dati_generali = context_data.get("dati_generali", {}) or {}
+            vulnerabilita_attese = context_data.get("vulnerabilita_attese", {}) or {}
+            context_lines.append("DATI DELL'EDIFICIO E CONTESTO:")
+            for key, label in [
+                ("destinazione_uso", "Destinazione d'uso"),
+                ("numero_piani", "Numero di piani"),
+                ("superficie_totale", "Superficie totale"),
+                ("altezza_edificio", "Altezza edificio"),
+                ("anno", "Anno di costruzione"),
+                ("materiale", "Materiale strutturale"),
+                ("zona_sismica", "Zona sismica"),
+                ("classe_uso", "Classe d'uso"),
+                ("stato_conservazione", "Stato di conservazione"),
+                ("livello_vulnerabilita", "Livello di vulnerabilità stimato"),
+                ("terreno", "Categoria sottosuolo / terreno"),
+                ("topografia", "Categoria topografica"),
+                ("comune_cap", "Comune / CAP"),
+            ]:
+                value = dati_generali.get(key, "N/D")
+                context_lines.append(f"- {label}: {value}")
 
-    context_block = "\n".join(context_lines).strip()
+            criticita = dati_generali.get("criticita_riscontrate", []) or []
+            if criticita:
+                context_lines.append("- Principali criticità riscontrate:")
+                for voce in criticita:
+                    context_lines.append(f"  - {voce}")
 
-    if context_block:
-        context_block = f"\n{context_block}\n"
+            context_lines.append("")
+            context_lines.append("VULNERABILITA' ATTESE:")
+            context_lines.append(f"- Normativa probabile: {vulnerabilita_attese.get('normativa_probabile', 'N/D')}")
+            for voce in vulnerabilita_attese.get("vulnerabilita_attese", []) or []:
+                context_lines.append(f"- {voce}")
+
+        if final_synthesis:
+            context_lines.append("")
+            context_lines.append("SINTESI FINALE:")
+            context_lines.append(f"- Quadro sintetico: {final_synthesis.get('quadro_sintetico', 'N/D')}")
+            context_lines.append(f"- Indizio di attenzione: {final_synthesis.get('indizio_attenzione', 'N/D')}")
+            context_lines.append(f"- Motivazione: {final_synthesis.get('motivazione_indizio', 'N/D')}")
+            for passo in final_synthesis.get("prossimi_passi", []) or []:
+                context_lines.append(f"- Prossimo passo: {passo}")
+
+        context_block = "\n".join(context_lines).strip()
+        return f"\n{context_block}\n" if context_block else ""
+
+    context_block = _build_context_block()
 
     prompt = f"""
-    Sei un Computista e Stimatore Edile italiano.
-    Basandoti sull'analisi seguente e sul contesto tecnico fornito, estrai gli interventi e produci una stima parametrica dei prezzi unitari medi (riferimento DEI/Regionali 2024).
+    Sei un ingegnere civile strutturista e computista estimativo con esperienza in interventi di miglioramento e adeguamento sismico in Italia.
+    Il tuo compito è stimare il costo indicativo degli interventi strutturali necessari su un edificio sulla base delle informazioni fornite.
+    Usa come base un prezzario ufficiale, ad esempio Prezzario DEI o prezzario regionale coerente con il contesto italiano, selezionando le voci più pertinenti e motivando la scelta.
+
+    Obiettivo:
+    1. Individua gli interventi strutturali più appropriati.
+    2. Spiega brevemente perché ogni intervento è consigliato.
+    3. Stima un intervallo di costo realistico basato sui prezzi medi italiani aggiornati.
+    4. Specifica l'unità di misura utilizzata.
+    5. Indica il livello di affidabilità della stima.
+    6. Evidenzia le principali variabili che possono modificare significativamente il costo.
 
     CONTEXTO TECNICO:
     {context_block}
@@ -178,15 +207,31 @@ def estimate_intervention_costs(analysis_text, api_key, project_id=None, context
     ANALISI STRUTTURALE:
     {analysis_text}
 
-    Restituisci SOLO una tabella Markdown con colonne:
-    | Problema | Urgenza | Intervento | Unità di Misura | Quantità Stimata | Prezzo Unitario Stimato (€) | Totale Stimato (€) | Note |
+    Restituisci la risposta in Markdown, con questa struttura obbligatoria:
+
+    ## Tabella costi interventi
+    | Intervento | Motivazione | Costo minimo (€) | Costo massimo (€) | Unità di misura | Affidabilità |
+
+    ## Costo totale stimato
+    - minimo: ...
+    - massimo: ...
+
+    ## Ipotesi adottate
+    - ...
+
+    ## Lavorazioni non comprese
+    - ...
+
+    ## Fattori che possono modificare il costo
+    - ...
 
     Regole:
-    - Usa range realistici (min-max) quando il testo non consente un valore puntuale.
-    - Se il dato non è stimabile da testo, scrivi "Da definire in sopralluogo".
-    - Se il contesto consente una stima, indica una quantità plausibile e il totale coerente.
-    - Privilegia interventi coerenti con il materiale, l'anno, la vulnerabilità attesa e la sintesi finale.
-    - Nessun testo extra fuori tabella.
+    - Non fare una semplice stima generica: scegli interventi specifici e coerenti con i dati dell'edificio.
+    - Se mancano dati chiave, usa ipotesi esplicite e conserva l'affidabilità su "Bassa" o "Media".
+    - Se il dato non è stimabile con ragionevole affidabilità, scrivi "Da definire in sopralluogo".
+    - Usa intervalli realistici min-max per ogni costo.
+    - Il totale minimo e massimo deve essere coerente con la somma delle voci.
+    - Nessun testo extra fuori dalle sezioni richieste.
     """
 
     try:
