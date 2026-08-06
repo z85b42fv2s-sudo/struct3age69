@@ -275,13 +275,6 @@ def render_auth_panel(ui, key_prefix: str = "sidebar"):
                 else:
                     ui.error(msg)
 
-    ui.markdown("---")
-    if ui.button("Entra subito come demo", key=f"{key_prefix}_demo_access"):
-        st.session_state.current_user_email = DEMO_EMAIL
-        st.session_state["current_user_credits"] = get_user_credit_status(DEMO_EMAIL)[0]
-        ui.success("Accesso demo attivato.")
-        st.rerun()
-
 
 @st.cache_data(ttl=300)
 def load_professionals():
@@ -523,10 +516,6 @@ st.sidebar.markdown("---")
 
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
-
-if not st.session_state.current_user_email:
-    st.session_state.current_user_email = DEMO_EMAIL
-    st.session_state["current_user_credits"] = get_user_credit_status(DEMO_EMAIL)[0]
 
 render_auth_panel(st.sidebar, key_prefix="sidebar")
 
