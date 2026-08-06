@@ -452,6 +452,7 @@ def check_trial(email):
 import random
 import smtplib
 from email.message import EmailMessage
+import traceback
 
 def get_secret(key):
     if hasattr(st, "secrets") and key in st.secrets:
@@ -531,7 +532,14 @@ def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
         st.session_state["last_email_error"] = ""
         return True
     except Exception as e:
+        error_type = type(e).__name__
         error_message = str(e)
+        smtp_code = getattr(e, "smtp_code", "")
+        smtp_error = getattr(e, "smtp_error", "")
+        detailed_error = f"{error_type}: {error_message}"
+        if smtp_code or smtp_error:
+            detailed_error += f" | SMTP {smtp_code}: {smtp_error}"
+        detailed_error += "\n" + traceback.format_exc(limit=1)
         hint = ""
         if "gmail" in str(host).lower():
             hint = " Se usi Gmail, serve quasi sempre una password per app, non la password normale dell'account."
@@ -540,8 +548,10 @@ def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
         elif "timeout" in error_message.lower() or "refused" in error_message.lower():
             hint = " Controlla host, porta e firewall del provider SMTP."
 
-        st.session_state["last_email_error"] = error_message + hint
-        st.error("Errore invio email: " + error_message + hint)
+        st.session_state["last_email_error"] = detailed_error + hint
+        st.session_state["last_email_error_type"] = error_type
+        st.session_state["last_email_error_code"] = smtp_code
+        st.error("Errore invio email: " + detailed_error + hint)
         return False
 
 
@@ -642,6 +652,8 @@ else:
 
 if st.session_state.get("last_email_error"):
     st.sidebar.error("Ultimo errore email: " + st.session_state["last_email_error"])
+    with st.sidebar.expander("Debug email", expanded=False):
+        st.code(st.session_state["last_email_error"], language="text")
 
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
