@@ -199,7 +199,7 @@ def render_auth_panel(ui, key_prefix: str = "sidebar"):
     with ui.form(f"{key_prefix}_login_form"):
         login_email = ui.text_input("Email", placeholder="nome@dominio.it", key=f"{key_prefix}_login_email")
         login_password = ui.text_input("Password", type="password", key=f"{key_prefix}_login_password")
-        login_submit = ui.form_submit_button("Accedi")
+        login_submit = st.form_submit_button("Accedi")
         if login_submit:
             ok, msg = authenticate_user(login_email, login_password)
             if ok:
@@ -214,7 +214,7 @@ def render_auth_panel(ui, key_prefix: str = "sidebar"):
         register_email = ui.text_input("Email per registrazione", placeholder="nome@dominio.it", key=f"{key_prefix}_register_email")
         register_password = ui.text_input("Scegli password", type="password", key=f"{key_prefix}_register_password")
         register_password_confirm = ui.text_input("Conferma password", type="password", key=f"{key_prefix}_register_password_confirm")
-        register_submit = ui.form_submit_button("Crea account")
+        register_submit = st.form_submit_button("Crea account")
         if register_submit:
             if register_password != register_password_confirm:
                 ui.error("Le password non coincidono.")
