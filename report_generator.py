@@ -24,7 +24,47 @@ class PDFReport(FPDF):
         self.multi_cell(0, 5, body)
         self.ln()
 
-def generate_pdf(data, analysis_text, images):
+
+def _format_synthesis_text(final_synthesis):
+    if not final_synthesis:
+        return "Sintesi finale non disponibile."
+
+    lines = []
+    quadro = final_synthesis.get("quadro_sintetico", "")
+    if quadro:
+        lines.append(quadro)
+
+    tabella = final_synthesis.get("tabella_vulnerabilita", [])
+    if tabella:
+        lines.append("")
+        lines.append("Vulnerabilita' attese vs riscontrate:")
+        for row in tabella:
+            lines.append(
+                f"- {row.get('vulnerabilita', 'N/D')} | Attesa: {row.get('attesa', row.get('attesa_da_normativa', 'N/D'))} | Confermata: {row.get('confermata_da_foto', 'N/D')} | Note: {row.get('note', 'N/D')}"
+            )
+
+    indizio = final_synthesis.get("indizio_attenzione", "")
+    motivazione = final_synthesis.get("motivazione_indizio", "")
+    if indizio or motivazione:
+        lines.append("")
+        lines.append(f"Indizio di attenzione complessivo: {indizio}")
+        if motivazione:
+            lines.append(f"Motivazione: {motivazione}")
+
+    prossimi_passi = final_synthesis.get("prossimi_passi", [])
+    if prossimi_passi:
+        lines.append("")
+        lines.append("Prossimi passi consigliati:")
+        for passo in prossimi_passi:
+            lines.append(f"- {passo}")
+
+    disclaimer = final_synthesis.get("disclaimer", "")
+    if disclaimer:
+        lines.append("")
+        lines.append(disclaimer)
+
+    return "\n".join(lines).strip()
+def generate_pdf(data, analysis_text, images, final_synthesis=None):
     pdf = PDFReport()
     pdf.add_page()
     
@@ -37,7 +77,7 @@ def generate_pdf(data, analysis_text, images):
         f"Terreno: {data.get('terreno', 'N/A')}\n"
         f"Topografia: {data.get('topografia', 'N/A')}\n"
         f"Normativa Probabile: {data.get('normativa', 'N/A')}\n"
-        f"Livello Conoscenza: {data.get('lc', 'N/A')} (FC={data.get('fc', 'N/A')})"
+        f"Localita: {data.get('localita', 'N/A')}"
     )
     pdf.chapter_body(info_text)
 
@@ -45,16 +85,24 @@ def generate_pdf(data, analysis_text, images):
     pdf.chapter_title("2. Analisi AI e Diagnosi")
     # Clean up markdown symbols for better PDF rendering
     # Clean up markdown symbols and handle unicode for standard fonts
-    clean_analysis = analysis_text.replace('**', '').replace('###', '')
+    clean_analysis = (analysis_text or "Nessuna analisi AI disponibile.").replace('**', '').replace('###', '')
     clean_analysis = clean_analysis.replace('€', 'EUR').replace('à', "a'").replace('è', "e'").replace('é', "e'").replace('ì', "i'").replace('ò', "o'").replace('ù', "u'")
     # Encode/decode to strip other non-latin-1 chars
     clean_analysis = clean_analysis.encode('latin-1', 'replace').decode('latin-1')
     pdf.chapter_body(clean_analysis)
 
-    # 3. Immagini
+    # 3. Sintesi finale
+    if final_synthesis:
+        pdf.chapter_title("3. Sintesi Finale e Report")
+        clean_synthesis = _format_synthesis_text(final_synthesis)
+        clean_synthesis = clean_synthesis.replace('€', 'EUR').replace('à', "a'").replace('è', "e'").replace('é', "e'").replace('ì', "i'").replace('ò', "o'").replace('ù', "u'")
+        clean_synthesis = clean_synthesis.encode('latin-1', 'replace').decode('latin-1')
+        pdf.chapter_body(clean_synthesis)
+
+    # 4. Immagini
     if images:
         pdf.add_page()
-        pdf.chapter_title("3. Documentazione Fotografica")
+        pdf.chapter_title("4. Documentazione Fotografica")
         for img_file in images:
             try:
                 # Save temp file to read it with FPDF

@@ -1,17 +1,16 @@
 from pathlib import Path
+import hashlib
 import streamlit as st
-import streamlit_authenticator as stauth
 import pandas as pd
 from datetime import datetime, timedelta
 import logic
 import ai_handler
+import synthesis
 import report_generator
 import regulation_handler
 
 import os
 from dotenv import load_dotenv
-import importlib
-import stripe
 
 # Configurazione pagina Streamlit: deve essere la prima chiamata `st.*`
 st.set_page_config(
@@ -20,12 +19,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Force clear Streamlit cache to reload modules
-st.cache_resource.clear()
-
-
-# Force reload regulation_handler to get latest code
-importlib.reload(regulation_handler)
+# In produzione evitiamo di invalidare cache/reload ad ogni rerun
+# (impatta molto i tempi di avvio).
 
 # Carica variabili d'ambiente dal file .env solo in locale (se presente)
 try:
@@ -34,10 +29,105 @@ except Exception:
     pass
 
 USERS_FILE = "users.csv"
+PROFESSIONALS_FILE = "professionisti.csv"
 TRIAL_DAYS = 3
 SUBSCRIPTION_PRICE = 9.90
 STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
 STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
+
+
+@st.cache_data(ttl=15)
+def load_users():
+    try:
+        df = pd.read_csv(USERS_FILE)
+        required = ["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"]
+        if df.empty or not all(col in df.columns for col in required):
+            emails = df["email"].tolist() if "email" in df.columns else []
+            df = pd.DataFrame(columns=required)
+            for e in emails:
+                df = pd.concat([df, pd.DataFrame({"email": [e], "data_registrazione": [datetime.now().strftime("%Y-%m-%d")], "abbonato": [False], "verified": [False], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
+            df.to_csv(USERS_FILE, index=False)
+        for col in ["email", "data_registrazione", "verification_code", "verification_expires"]:
+            if col in df.columns:
+                df[col] = df[col].fillna("").astype(str)
+                df[col] = df[col].replace({"nan": "", "None": ""})
+        if "verification_code" in df.columns:
+            df["verification_code"] = df["verification_code"].apply(
+                lambda value: value[:-2] if isinstance(value, str) and value.endswith(".0") and value[:-2].isdigit() else value
+            )
+        df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
+        if "verified" in df.columns:
+            df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
+        return df
+    except Exception:
+        df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"])
+        df.to_csv(USERS_FILE, index=False)
+        return df
+
+
+@st.cache_data(ttl=300)
+def load_professionals():
+    try:
+        df = pd.read_csv(PROFESSIONALS_FILE)
+        required = ["nome", "categoria", "zona", "telefono", "sito", "note"]
+        if not all(col in df.columns for col in required):
+            return pd.DataFrame(columns=required)
+        for col in required:
+            df[col] = df[col].fillna("").astype(str)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["nome", "categoria", "zona", "telefono", "sito", "note"])
+
+
+def suggest_professionals(localita: str, categoria: str = ""):
+    df = load_professionals()
+    if df.empty:
+        return df
+    filtered = df
+    if localita:
+        localita_norm = localita.strip().lower()
+        filtered = filtered[filtered["zona"].str.lower().str.contains(localita_norm, na=False)]
+    if categoria and categoria != "Tutte":
+        filtered = filtered[filtered["categoria"].str.lower() == categoria.strip().lower()]
+    return filtered
+
+
+def render_professionals_section(localita_value: str):
+    categoria_prof = st.selectbox(
+        "Tipo di professionista",
+        ["Tutte", "Ingegnere Strutturista", "Impresa Edile", "Geologo", "Diagnostica Strutturale"],
+        key="categoria_prof_select",
+    )
+
+    if st.button("Trova professionisti in zona", key="trova_professionisti_button"):
+        if not localita_value.strip():
+            st.warning("Inserisci CAP o Comune nella sezione dati generali.")
+        else:
+            risultati_prof = suggest_professionals(localita_value, categoria_prof)
+            if risultati_prof.empty:
+                st.warning("Nessun professionista trovato per i filtri selezionati.")
+            else:
+                st.success(f"Trovati {len(risultati_prof)} professionisti.")
+                for _, row in risultati_prof.iterrows():
+                    st.markdown(
+                        f"**{row['nome']}**  \n"
+                        f"Categoria: {row['categoria']}  \n"
+                        f"Zona: {row['zona']}  \n"
+                        f"Telefono: {row['telefono']}  \n"
+                        f"Sito: {row['sito']}  \n"
+                        f"Note: {row['note']}"
+                    )
+
+
+def compute_uploaded_files_hash(uploaded_files):
+    hasher = hashlib.sha256()
+    for uploaded_file in uploaded_files or []:
+        try:
+            hasher.update(uploaded_file.name.encode("utf-8"))
+            hasher.update(uploaded_file.getvalue())
+        except Exception:
+            continue
+    return hasher.hexdigest()
 
 # Meta tag Google Search Console (iniettato con component)
 import streamlit.components.v1 as components
@@ -79,7 +169,33 @@ components.html(
     height=0
 )
 
+st.markdown("---")
+st.header("Accesso rapido")
+st.info("Se hai già un'email verificata, puoi accedere subito anche dalla pagina iniziale.")
+accesso_email_rapido = st.text_input("Email per accesso rapido", placeholder="demo@demo.it", key="accesso_email_rapido")
+if st.button("Accedi con email rapida", key="accesso_rapido_button"):
+    email_norm = accesso_email_rapido.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        st.warning("Inserisci una email valida.")
+    else:
+        utenti = load_users()
+        user_row = utenti[utenti["email"].astype(str).str.lower() == email_norm]
+        if not user_row.empty and bool(user_row.iloc[0].get("verified", False)):
+            st.session_state.current_user_email = email_norm
+            st.rerun()
+        elif not user_row.empty:
+            st.warning("Email presente ma non verificata. Completa la verifica OTP dalla sidebar.")
+        else:
+            st.warning("Email non trovata nel database utenti.")
+
+st.markdown("---")
+st.header("Professionisti Consigliati in Zona")
+st.info("Indicazioni orientative: verifica sempre abilitazioni, referenze e preventivi prima di affidare incarichi.")
+professionisti_localita = st.text_input("CAP o Comune per cercare professionisti", placeholder="Es. 20121 oppure Milano", key="professionisti_localita_public")
+render_professionals_section(professionisti_localita)
+
 # --- AUTENTICAZIONE UTENTE ---
+@st.cache_data(ttl=15)
 def load_users():
     try:
         df = pd.read_csv(USERS_FILE)
@@ -111,6 +227,67 @@ def load_users():
         df.to_csv(USERS_FILE, index=False)
         return df
 
+
+def invalidate_users_cache():
+    try:
+        load_users.clear()
+    except Exception:
+        pass
+
+
+@st.cache_data(ttl=300)
+def load_professionals():
+    try:
+        df = pd.read_csv(PROFESSIONALS_FILE)
+        required = ["nome", "categoria", "zona", "telefono", "sito", "note"]
+        if not all(col in df.columns for col in required):
+            return pd.DataFrame(columns=required)
+        for col in required:
+            df[col] = df[col].fillna("").astype(str)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["nome", "categoria", "zona", "telefono", "sito", "note"])
+
+
+def suggest_professionals(localita: str, categoria: str = ""):
+    df = load_professionals()
+    if df.empty:
+        return df
+    filtered = df
+    if localita:
+        localita_norm = localita.strip().lower()
+        filtered = filtered[filtered["zona"].str.lower().str.contains(localita_norm, na=False)]
+    if categoria and categoria != "Tutte":
+        filtered = filtered[filtered["categoria"].str.lower() == categoria.strip().lower()]
+    return filtered
+
+
+def render_professionals_section(localita_value: str):
+    categoria_prof = st.selectbox(
+        "Tipo di professionista",
+        ["Tutte", "Ingegnere Strutturista", "Impresa Edile", "Geologo", "Diagnostica Strutturale"],
+        key="categoria_prof_select",
+    )
+
+    if st.button("Trova professionisti in zona", key="trova_professionisti_button"):
+        if not localita_value.strip():
+            st.warning("Inserisci CAP o Comune nella sezione dati generali.")
+        else:
+            risultati_prof = suggest_professionals(localita_value, categoria_prof)
+            if risultati_prof.empty:
+                st.warning("Nessun professionista trovato per i filtri selezionati.")
+            else:
+                st.success(f"Trovati {len(risultati_prof)} professionisti.")
+                for _, row in risultati_prof.iterrows():
+                    st.markdown(
+                        f"**{row['nome']}**  \n"
+                        f"Categoria: {row['categoria']}  \n"
+                        f"Zona: {row['zona']}  \n"
+                        f"Telefono: {row['telefono']}  \n"
+                        f"Sito: {row['sito']}  \n"
+                        f"Note: {row['note']}"
+                    )
+
 def save_user(email, abbonato=False, verified=False):
     df = load_users()
     email = email.strip().lower()
@@ -125,6 +302,7 @@ def save_user(email, abbonato=False, verified=False):
     else:
         df = pd.concat([df, pd.DataFrame({"email": [email], "data_registrazione": [now], "abbonato": [abbonato], "verified": [verified], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
     df.to_csv(USERS_FILE, index=False)
+    invalidate_users_cache()
 
 def check_trial(email):
     df = load_users()
@@ -203,6 +381,7 @@ def set_verification_code(email, minutes=10):
             "verification_expires": [expires]
         })], ignore_index=True)
     df.to_csv(USERS_FILE, index=False)
+    invalidate_users_cache()
     return code, expires
 
 
@@ -230,6 +409,7 @@ def verify_otp(email, code):
     df.at[idx, "verification_code"] = ""
     df.at[idx, "verification_expires"] = ""
     df.to_csv(USERS_FILE, index=False)
+    invalidate_users_cache()
     return True, "Email verificata"
 
 # ------------------ end OTP helpers ------------------
@@ -336,7 +516,8 @@ if st.sidebar.button("Reinvia codice"):
             st.sidebar.error("Errore invio codice. Riprova più tardi.")
 
 username = st.session_state.current_user_email.strip().lower()
-user_row = load_users()[load_users()["email"].astype(str).str.lower() == username] if username else pd.DataFrame()
+users_df = load_users() if username else pd.DataFrame()
+user_row = users_df[users_df["email"].astype(str).str.lower() == username] if username else pd.DataFrame()
 authentication_status = bool(username) and not user_row.empty and bool(user_row.iloc[0].get("verified", False))
 
 # Do NOT auto-create/save users here. Users are created explicitly via signup or
@@ -389,6 +570,8 @@ st.title("Structural 3age - Analisi Condizione Strutture")
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     st.sidebar.warning("Chiave OpenAI non trovata. Contatta l'amministratore.")
+st.session_state["openai_api_key"] = api_key
+st.session_state["openai_project"] = os.getenv("OPENAI_PROJECT")
 
 # --- SEZIONE 1: Dati Generali ---
 st.header("1. Dati Generali della Struttura")
@@ -402,6 +585,7 @@ with col1:
 with col2:
     tipo_terreno = st.selectbox("Categoria Sottosuolo (NTC 2018)", ["A", "B", "C", "D", "E"])
     categoria_topografica = st.selectbox("Categoria Topografica", ["T1", "T2", "T3", "T4"])
+    localita_input = st.text_input("CAP o Comune", placeholder="Es. 20121 oppure Milano")
 
 # --- SEZIONE 2: Vulnerabilità e Normativa ---
 st.header("2. Valutazione Vulnerabilità e Normativa")
@@ -412,40 +596,27 @@ st.write("### Vulnerabilità Tipiche Attese:")
 for v in vulnerabilita:
     st.write(f"- {v}")
 
-# --- SEZIONE 3: Livello di Conoscenza (LC) ---
-st.header("3. Livello di Conoscenza (LC)")
-st.write("Seleziona i dati disponibili per la struttura:")
-
-col_lc1, col_lc2, col_lc3 = st.columns(3)
-with col_lc1:
-    geom = st.checkbox("Geometria completa (Rilievo)")
-with col_lc2:
-    dettagli = st.checkbox("Dettagli costruttivi (Armature/Tessitura)")
-with col_lc3:
-    materiali = st.checkbox("Proprietà materiali (Prove in situ/Lab)")
-
-lc, fc, suggerimenti = logic.calculate_knowledge_level(geom, dettagli, materiali)
-
-st.metric("Livello di Conoscenza (LC)", lc)
-st.metric("Fattore di Confidenza (FC)", fc)
-
-if suggerimenti:
-    st.warning("Per migliorare il Livello di Conoscenza:")
-    for s in suggerimenti:
-        st.write(f"- {s}")
-
-# --- SEZIONE 4: Analisi Consigliata ---
-st.header("4. Tipo di Analisi Consigliata")
-regolarita_pianta = st.checkbox("Struttura Regolare in Pianta")
-regolarita_altezza = st.checkbox("Struttura Regolare in Altezza")
-
-analisi_consigliata = logic.recommend_analysis_type(materiale, regolarita_pianta, regolarita_altezza)
-st.success(f"Metodo di Analisi Consigliato: **{analisi_consigliata}**")
-
-# --- SEZIONE 5: Analisi AI delle Foto ---
-# --- SEZIONE 5: Analisi AI delle Foto ---
-st.header("5. Analisi AI delle Foto (Degrado e Fessurazioni)")
+# --- SEZIONE 4: Analisi AI delle Foto ---
+st.header("4. Analisi AI delle Foto (Degrado e Fessurazioni)")
 uploaded_files = st.file_uploader("Carica foto della struttura (viste d'insieme e dettagli)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+
+dati_generali = {
+    "materiale": materiale,
+    "anno": anno_costruzione,
+    "zona_sismica": zona_sismica,
+    "terreno": tipo_terreno,
+    "topografia": categoria_topografica,
+    "comune_cap": localita_input,
+}
+
+vulnerabilita_attese = {
+    "normativa_probabile": normativa,
+    "vulnerabilita_attese": vulnerabilita,
+    "fonte": "logic.py",
+}
+
+files_to_use = st.session_state.get("uploaded_files", uploaded_files or [])
+descrizione = st.session_state.get("analysis_result", "")
 
 if uploaded_files:
     # Display uploaded images in a grid
@@ -477,6 +648,7 @@ if uploaded_files:
                     # Store in session state
                     st.session_state['analysis_result'] = descrizione
                     st.session_state['uploaded_files'] = uploaded_files
+                    files_to_use = uploaded_files
                     
                 except Exception as e:
                     st.error(f"Errore durante l'analisi: {e}")
@@ -506,34 +678,78 @@ if uploaded_files:
                     st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
                 except Exception as e:
                     st.error(f"Errore nella stima: {e}")
-        
-        # --- PDF GENERATION ---
-        st.markdown("---")
-        st.subheader("📄 Scarica Report")
-        
-        report_data = {
-            "materiale": materiale,
-            "anno": anno_costruzione,
-            "zona_sismica": zona_sismica,
-            "terreno": tipo_terreno,
-            "topografia": categoria_topografica,
-            "normativa": normativa,
-            "lc": lc,
-            "fc": fc
-        }
-        
-        pdf_bytes = report_generator.generate_pdf(report_data, descrizione, files_to_use)
-        
-        st.download_button(
-            label="📥 Scarica Report PDF",
-            data=pdf_bytes,
-            file_name="report_structural_3age.pdf",
-            mime="application/pdf"
-        )
 
-# --- SEZIONE 6: Assistente Normativo ---
 st.markdown("---")
-st.header("6. 📚 Assistente Normativo (RAG)")
+st.subheader("3. Sintesi Finale / Report")
+st.info("Questa sezione incrocia i dati generali, le vulnerabilità attese e l'analisi visiva AI in un'unica sintesi coerente.")
+
+esito_visivo = {
+    "presenza_foto": bool(files_to_use),
+    "foto_hash": compute_uploaded_files_hash(files_to_use),
+    "analisi_visiva_disponibile": bool(descrizione),
+    "analisi_visiva": descrizione if descrizione else "Nessuna analisi visiva disponibile: sintesi basata solo su dati regolamentari.",
+    "openai_ready": bool(api_key),
+    "openai_project_presente": bool(os.getenv("OPENAI_PROJECT")),
+}
+
+if st.button("Genera / Aggiorna sintesi finale", key="genera_sintesi_finale_button"):
+    try:
+        final_synthesis = synthesis.generate_final_synthesis(dati_generali, vulnerabilita_attese, esito_visivo)
+        st.session_state["final_synthesis"] = final_synthesis
+    except Exception as e:
+        st.error(f"Errore nella generazione della sintesi finale: {e}")
+
+final_synthesis = st.session_state.get("final_synthesis")
+
+if final_synthesis:
+    st.markdown("### 🧩 Quadro sintetico")
+    st.write(final_synthesis.get("quadro_sintetico", ""))
+
+    st.markdown("### 🔎 Vulnerabilità attese vs riscontrate")
+    tabella_vulnerabilita = final_synthesis.get("tabella_vulnerabilita", [])
+    if tabella_vulnerabilita:
+        st.table(pd.DataFrame(tabella_vulnerabilita))
+    else:
+        st.info("Nessuna tabella vulnerabilità disponibile nella sintesi finale.")
+
+    st.markdown("### ⚠️ Indizio di attenzione complessivo")
+    st.write(final_synthesis.get("indizio_attenzione", "media").upper())
+    st.write(final_synthesis.get("motivazione_indizio", ""))
+
+    st.markdown("### ✅ Prossimi passi consigliati")
+    for passo in final_synthesis.get("prossimi_passi", []):
+        st.write(f"- {passo}")
+
+    st.caption(final_synthesis.get("disclaimer", ""))
+else:
+    st.warning("Premi il pulsante per generare la sintesi finale automatizzata.")
+
+# --- PDF GENERATION ---
+st.markdown("---")
+st.subheader("📄 Scarica Report")
+
+report_data = {
+    "materiale": materiale,
+    "anno": anno_costruzione,
+    "zona_sismica": zona_sismica,
+    "terreno": tipo_terreno,
+    "topografia": categoria_topografica,
+    "normativa": normativa,
+    "localita": localita_input,
+}
+
+pdf_bytes = report_generator.generate_pdf(report_data, descrizione, files_to_use, final_synthesis)
+
+st.download_button(
+    label="📥 Scarica Report PDF",
+    data=pdf_bytes,
+    file_name="report_structural_3age.pdf",
+    mime="application/pdf",
+)
+
+# --- SEZIONE 5: Assistente Normativo ---
+st.markdown("---")
+st.header("5. 📚 Assistente Normativo (RAG)")
 st.info("Fai una domanda sulle NTC 2018 o sui documenti caricati. L'AI cercherà la risposta nei PDF.")
 
 question = st.text_input("Domanda (es. 'Quali sono i limiti per i nodi non confinati?')")

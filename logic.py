@@ -45,43 +45,6 @@ def get_vulnerabilities(year, material):
 
     return normativa, vulnerabilities
 
-def calculate_knowledge_level(geom, dettagli, materiali):
-    """
-    Calcola il Livello di Conoscenza (LC) e il Fattore di Confidenza (FC).
-    """
-    # Logica semplificata basata sulla quantità di info
-    score = 0
-    if geom: score += 1
-    if dettagli: score += 1
-    if materiali: score += 1
-
-    lc = "LC1"
-    fc = 1.35
-    suggestions = []
-
-    if score == 1:
-        lc = "LC1 (Conoscenza Limitata)"
-        fc = 1.35
-        if not geom: suggestions.append("Eseguire rilievo geometrico completo.")
-        if not dettagli: suggestions.append("Eseguire indagini simulate o limitate per dettagli costruttivi.")
-        if not materiali: suggestions.append("Eseguire prove limitate sui materiali.")
-    elif score == 2:
-        lc = "LC2 (Conoscenza Adeguata)"
-        fc = 1.20
-        if not geom: suggestions.append("Completare il rilievo geometrico.")
-        if not dettagli: suggestions.append("Estendere le indagini sui dettagli costruttivi.")
-        if not materiali: suggestions.append("Estendere le prove sui materiali.")
-    elif score == 3:
-        lc = "LC3 (Conoscenza Accurata)"
-        fc = 1.00
-        suggestions = ["Livello di conoscenza massimo raggiunto."]
-    else:
-        lc = "LC0 (Insufficiente)"
-        fc = 1.35 # Default penalizzante
-        suggestions = ["Acquisire almeno la geometria e dati base."]
-
-    return lc, fc, suggestions
-
 def recommend_analysis_type(material, reg_pianta, reg_altezza):
     """
     Consiglia il tipo di analisi strutturale.

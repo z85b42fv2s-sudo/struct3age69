@@ -47,58 +47,41 @@ def analyze_structure_image(image_files, api_key, project_id=None, context_info=
         """
 
     prompt = f"""
-    Sei un esperto Ingegnere Strutturista Senior, specializzato in diagnosi di edifici esistenti secondo le NTC 2018.
-    Stai effettuando una **Ispezione Visiva Preliminare** basata sulle immagini fornite.
-    
+    Sei un Ingegnere Strutturista Senior esperto in diagnosi preliminare su edifici esistenti (NTC 2018).
+    Esegui una Ispezione Visiva Preliminare basata sulle immagini fornite.
+
     {context_str}
 
-    OBIETTIVO: Fornire una valutazione tecnica professionale basata ESCLUSIVAMENTE sulle evidenze visive.
-    Non rifiutarti di analizzare l'immagine. Se i dettagli sono parziali, descrivi ciò che è visibile con terminologia tecnica appropriata.
-    
-    IMPORTANTE:
-    1. Ignora persone, volti o targhe (privacy).
-    2. Concentrati su quadro fessurativo, degrado materiali, e cinematismi di danno.
-    3. Usa un tono professionale, tecnico e diretto.
+    OBIETTIVO APPLICATIVO:
+    L'utente vuole capire rapidamente:
+    1) quali problemi strutturali probabili sono presenti,
+    2) quanto sono urgenti,
+    3) quali interventi fare,
+    4) quali indagini servono prima dei lavori.
 
-    Analizza le immagini fornite (viste d'insieme e dettagli).
+    Vincoli:
+    - Basati solo su evidenze visive e sui dati forniti.
+    - Se l'evidenza è parziale, esplicita il livello di confidenza.
+    - Ignora persone, volti, targhe e dettagli non strutturali.
+    - Usa linguaggio tecnico ma leggibile.
 
-    Fornisci un report strutturato nei seguenti punti:
+    OUTPUT OBBLIGATORIO (formato Markdown):
 
-    1. **Elementi Strutturali e Tipologia**: 
-       - Identifica travi, pilastri, muri portanti, solai, ecc. 
-       - Ipotizza l'epoca costruttiva e la tipologia (es. telaio in c.a., muratura portante, mista).
-    
-    2. **Quadro Fessurativo e Meccanismi di Danno**:
-       - **Localizzazione**: Indica con precisione dove si trovano i danni (es. "angolo in alto a sinistra", "nodo trave-pilastro piano terra").
-       - **Descrizione**: Descrivi dettagliatamente lesioni e fessurazioni.
-       - **Meccanismi**:
-         - Per la muratura: identifica possibili **meccanismi di collasso** (es. ribaltamento semplice, flessione verticale, taglio nel piano).
-         - Per il c.a.: cerca segni di corrosione, espulsione copriferro, o fessure da taglio/flessione.
-       - **Cause**: Ipotizza le cause probabili (es. cedimento fondale, sisma, carichi verticali eccessivi).
+    ## 1) Problemi strutturali probabili
+    Fornisci una tabella con colonne:
+    | Problema | Evidenza osservata | Gravità (Bassa/Media/Alta) | Urgenza (Monitorare/Intervenire presto/Immediata) | Confidenza (Bassa/Media/Alta) |
 
-    3. **Valutazione Stati Limite (NTC 2018)**:
-       - **SLD (Stato Limite di Danno)**: Danni che compromettono l'utilizzo ma non la stabilità immediata.
-       - **SLV (Stato Limite di Salvaguardia della Vita)**: Segnali di rischio grave per la stabilità (es. cerniere plastiche, crolli parziali).
+    ## 2) Interventi consigliati
+    Fornisci una tabella con colonne:
+    | Problema collegato | Intervento consigliato | Obiettivo tecnico | Priorità (1-3) | Note operative |
 
-    4. **Degrado e Manutenzione**:
-       - Valuta degrado chimico/fisico/biologico:
-         - **Reazione Alcali-Aggregati (AAR)**: Map cracking, gel.
-         - **Attacco Solfatico**: Espansioni, sfarinamento.
-         - **Corrosione da Cloruri**: Pitting, macchie ruggine.
-         - Altro: Umidità, muffe, vegetazione.
-       - Identifica "Punti di Debolezza Locali".
+    ## 3) Indagini e verifiche prima dei lavori
+    Elenco puntato di prove consigliate (es. pacometria, martinetti, endoscopie, monitoraggio fessure), con motivo sintetico.
 
-    5. **Suggerimenti di Intervento (NTC 2018)**:
-       - Proponi strategie di intervento basate sulla gravità e sulla tipologia:
-         - **Riparazione Locale**: (es. scuci-cuci, iniezioni di malta, ripristino copriferro con malte tixotropiche).
-         - **Miglioramento Sismico**:
-           - **C.A.**: Incamiciatura in c.a. o acciaio (jacketing), placcaggio con FRP (fibre di carbonio) per rinforzo a taglio/flessione dei nodi.
-           - **Muratura**: Intonaco armato (betoncino), inserimento di catene o tiranti, cerchiature.
-         - **Adeguamento Sismico**: (es. inserimento di setti sismici, isolamento alla base, dissipatori viscosi).
-
-    6. **Sintesi e Indagini**:
-       - Giudizio sintetico sulla gravità.
-       - Suggerisci indagini specifiche (es. martinetti piatti, pacometriche, videoendoscopie).
+    ## 4) Sintesi decisionale
+    - Rischio complessivo: Basso/Medio/Alto.
+    - Azione entro 30 giorni: cosa fare subito.
+    - Azione entro 90 giorni: cosa pianificare.
     """
 
     messages = [
@@ -128,19 +111,19 @@ def estimate_intervention_costs(analysis_text, api_key, project_id=None):
     client = OpenAI(api_key=api_key, project=project_id)
 
     prompt = f"""
-    Sei un esperto Computista e Stimatore Edile italiano.
-    Basandoti sulla seguente analisi strutturale, individua gli interventi suggeriti e fornisci una stima dei **Prezzi Unitari** medi (riferimento Prezzari DEI/Regionali 2024).
+    Sei un Computista e Stimatore Edile italiano.
+    Basandoti sull'analisi seguente, estrai gli interventi e produci una stima parametrica dei prezzi unitari medi (riferimento DEI/Regionali 2024).
 
     ANALISI STRUTTURALE:
     {analysis_text}
 
-    Compito:
-    1. Estrai l'elenco degli interventi necessari (es. "Intonaco armato", "Iniezioni", "FRP").
-    2. Per ciascuno, fornisci un range di prezzo unitario realistico.
-    3. Restituisci SOLO una tabella Markdown con le seguenti colonne:
-       | Intervento | Unità di Misura | Prezzo Unitario Stimato (€) | Note (es. voci incluse/escluse) |
+    Restituisci SOLO una tabella Markdown con colonne:
+    | Problema | Urgenza | Intervento | Unità di Misura | Prezzo Unitario Stimato (€) | Note |
 
-    Non aggiungere testo introduttivo o conclusivo, solo la tabella.
+    Regole:
+    - Usa range realistici (min-max).
+    - Se il dato non è stimabile da testo, scrivi "Da definire in sopralluogo".
+    - Nessun testo extra fuori tabella.
     """
 
     try:
