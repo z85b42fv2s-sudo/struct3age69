@@ -95,7 +95,7 @@ def suggest_professionals(localita: str, categoria: str = ""):
 def render_professionals_section(localita_value: str):
     categoria_prof = st.selectbox(
         "Tipo di professionista",
-        ["Tutte", "Ingegnere Strutturista", "Impresa Edile", "Geologo", "Diagnostica Strutturale"],
+        ["Tutte", "Ingegnere Strutturista", "Studio Tecnico Ingegneristico", "Impresa Edile", "Geologo", "Diagnostica Strutturale"],
         key="categoria_prof_select",
     )
 
@@ -109,13 +109,53 @@ def render_professionals_section(localita_value: str):
             else:
                 st.success(f"Trovati {len(risultati_prof)} professionisti.")
                 for _, row in risultati_prof.iterrows():
+                    sito = row.get("sito", "").strip() or "—"
+                    telefono = row.get("telefono", "").strip() or "—"
+                    note = row.get("note", "").strip() or "—"
+                    categoria = row.get("categoria", "").strip() or "—"
+                    zona = row.get("zona", "").strip() or "—"
+
                     st.markdown(
-                        f"**{row['nome']}**  \n"
-                        f"Categoria: {row['categoria']}  \n"
-                        f"Zona: {row['zona']}  \n"
-                        f"Telefono: {row['telefono']}  \n"
-                        f"Sito: {row['sito']}  \n"
-                        f"Note: {row['note']}"
+                        f"""
+                        <div style="
+                            background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,41,59,0.96));
+                            border: 1px solid rgba(148,163,184,0.35);
+                            border-radius: 18px;
+                            padding: 18px 20px;
+                            margin: 0 0 16px 0;
+                            box-shadow: 0 10px 25px rgba(15,23,42,0.18);
+                            color: #F8FAFC;
+                        ">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+                                <div>
+                                    <div style="font-size:20px;font-weight:800;letter-spacing:0.2px;">{row['nome']}</div>
+                                    <div style="margin-top:6px;font-size:13px;color:#CBD5E1;">{categoria}</div>
+                                </div>
+                                <div style="background:rgba(34,197,94,0.15);color:#86EFAC;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;">
+                                    Presenza locale
+                                </div>
+                            </div>
+                            <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Zona operativa</div>
+                                    <div style="font-size:14px;margin-top:2px;">{zona}</div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Telefono</div>
+                                    <div style="font-size:14px;margin-top:2px;">{telefono}</div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Sito web</div>
+                                    <div style="font-size:14px;margin-top:2px;">{sito}</div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Note</div>
+                                    <div style="font-size:14px;margin-top:2px;">{note}</div>
+                                </div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
 
 
