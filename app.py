@@ -517,17 +517,31 @@ def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
     try:
         if use_ssl or port == 465:
             with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+                smtp.ehlo()
                 smtp.login(user, password)
                 smtp.send_message(msg)
         else:
             with smtplib.SMTP(host, port, timeout=15) as smtp:
+                smtp.ehlo()
                 if use_starttls:
                     smtp.starttls()
+                    smtp.ehlo()
                 smtp.login(user, password)
                 smtp.send_message(msg)
+        st.session_state["last_email_error"] = ""
         return True
     except Exception as e:
-        st.error("Errore invio email: " + str(e))
+        error_message = str(e)
+        hint = ""
+        if "gmail" in str(host).lower():
+            hint = " Se usi Gmail, serve quasi sempre una password per app, non la password normale dell'account."
+        elif "auth" in error_message.lower() or "password" in error_message.lower():
+            hint = " Verifica credenziali SMTP e restrizioni del provider."
+        elif "timeout" in error_message.lower() or "refused" in error_message.lower():
+            hint = " Controlla host, porta e firewall del provider SMTP."
+
+        st.session_state["last_email_error"] = error_message + hint
+        st.error("Errore invio email: " + error_message + hint)
         return False
 
 
@@ -625,6 +639,9 @@ else:
     st.sidebar.info(
         f"Email configurata correttamente. Modalità invio: {mode_label}, porta {email_config_status['port']}."
     )
+
+if st.session_state.get("last_email_error"):
+    st.sidebar.error("Ultimo errore email: " + st.session_state["last_email_error"])
 
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
