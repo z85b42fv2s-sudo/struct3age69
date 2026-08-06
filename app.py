@@ -563,7 +563,7 @@ if uploaded_files:
     cols = st.columns(min(len(uploaded_files), 3))
     for i, file in enumerate(uploaded_files):
         with cols[i % 3]:
-            st.image(file, caption=f"Foto {i+1}", use_column_width=True)
+            st.image(file, caption=f"Foto {i+1}", use_container_width=True)
     
     if st.button("Analizza Foto con AI"):
         current_credits, _ = get_user_credit_status(username)
