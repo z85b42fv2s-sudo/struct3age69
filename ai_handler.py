@@ -1,4 +1,5 @@
 import base64
+import re
 import os
 from openai import OpenAI
 
@@ -12,6 +13,32 @@ import streamlit as st
 
 def encode_image(image_file):
     return base64.b64encode(image_file.getvalue()).decode('utf-8')
+
+
+def extract_markdown_section(text, heading):
+    if not text:
+        return ""
+
+    pattern = rf"(^|\n)##\s*{re.escape(heading)}\s*\n"
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return ""
+
+    start = match.end()
+    remaining = text[start:]
+    next_heading = re.search(r"\n##\s+", remaining)
+    if next_heading:
+        remaining = remaining[:next_heading.start()]
+
+    return remaining.strip()
+
+
+def extract_intervention_section(text):
+    section = extract_markdown_section(text, "2) Interventi consigliati")
+    if section:
+        return section
+
+    return extract_markdown_section(text, "2. Interventi consigliati")
 
 def analyze_structure_image(image_files, api_key, project_id=None, context_info=None):
     """

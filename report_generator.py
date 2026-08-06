@@ -64,7 +64,9 @@ def _format_synthesis_text(final_synthesis):
         lines.append(disclaimer)
 
     return "\n".join(lines).strip()
-def generate_pdf(data, analysis_text, images, final_synthesis=None):
+
+
+def generate_pdf(data, analysis_text, images, final_synthesis=None, intervention_text=None):
     pdf = PDFReport()
     pdf.add_page()
     
@@ -91,18 +93,26 @@ def generate_pdf(data, analysis_text, images, final_synthesis=None):
     clean_analysis = clean_analysis.encode('latin-1', 'replace').decode('latin-1')
     pdf.chapter_body(clean_analysis)
 
-    # 3. Sintesi finale
+    # 3. Interventi consigliati
+    if intervention_text:
+        pdf.chapter_title("3. Interventi Consigliati")
+        clean_intervention = intervention_text.replace('**', '').replace('###', '')
+        clean_intervention = clean_intervention.replace('€', 'EUR').replace('à', "a'").replace('è', "e'").replace('é', "e'").replace('ì', "i'").replace('ò', "o'").replace('ù', "u'")
+        clean_intervention = clean_intervention.encode('latin-1', 'replace').decode('latin-1')
+        pdf.chapter_body(clean_intervention)
+
+    # 4. Sintesi finale
     if final_synthesis:
-        pdf.chapter_title("3. Sintesi Finale e Report")
+        pdf.chapter_title("4. Sintesi Finale e Report")
         clean_synthesis = _format_synthesis_text(final_synthesis)
         clean_synthesis = clean_synthesis.replace('€', 'EUR').replace('à', "a'").replace('è', "e'").replace('é', "e'").replace('ì', "i'").replace('ò', "o'").replace('ù', "u'")
         clean_synthesis = clean_synthesis.encode('latin-1', 'replace').decode('latin-1')
         pdf.chapter_body(clean_synthesis)
 
-    # 4. Immagini
+    # 5. Immagini
     if images:
         pdf.add_page()
-        pdf.chapter_title("4. Documentazione Fotografica")
+        pdf.chapter_title("5. Documentazione Fotografica")
         for img_file in images:
             try:
                 # Save temp file to read it with FPDF

@@ -711,14 +711,18 @@ if uploaded_files:
     if 'analysis_result' in st.session_state:
         descrizione = st.session_state['analysis_result']
         files_to_use = st.session_state.get('uploaded_files', uploaded_files)
+        interventi_ai = ai_handler.extract_intervention_section(descrizione)
 
         st.markdown("### 📋 Report Analisi AI")
         st.write(descrizione)
 
         st.markdown("---")
-        with st.expander("🛠️ Suggerimenti di Intervento (NTC 2018)", expanded=True):
-            st.info("Questa sezione contiene suggerimenti generati dall'AI basati sulle NTC 2018. Consultare sempre un ingegnere strutturista per il progetto esecutivo.")
-            st.markdown("Vedi il punto **5. Suggerimenti di Intervento** nel report sopra per i dettagli specifici.")
+        st.subheader("🛠️ Interventi Consigliati")
+        if interventi_ai:
+            st.markdown(interventi_ai)
+        else:
+            st.warning("La sezione interventi non è stata trovata nel testo AI generato.")
+        st.info("Interventi estratti direttamente dalla risposta AI. Consultare sempre un ingegnere strutturista per il progetto esecutivo.")
 
         # --- COST ESTIMATION ---
         st.markdown("---")
@@ -727,7 +731,8 @@ if uploaded_files:
             with st.spinner("Calcolo stima parametrica in corso..."):
                 try:
                     project_id = os.getenv("OPENAI_PROJECT")
-                    stima_costi = ai_handler.estimate_intervention_costs(descrizione, api_key, project_id)
+                    source_text = interventi_ai or descrizione
+                    stima_costi = ai_handler.estimate_intervention_costs(source_text, api_key, project_id)
                     st.markdown(stima_costi)
                     st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
                 except Exception as e:
@@ -792,7 +797,7 @@ report_data = {
     "localita": localita_input,
 }
 
-pdf_bytes = report_generator.generate_pdf(report_data, descrizione, files_to_use, final_synthesis)
+    pdf_bytes = report_generator.generate_pdf(report_data, descrizione, files_to_use, final_synthesis, interventi_ai)
 
 st.download_button(
     label="📥 Scarica Report PDF",
