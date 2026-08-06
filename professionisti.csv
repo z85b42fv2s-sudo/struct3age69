@@ -1,8 +1,8 @@
-nome,categoria,zona,telefono,sito,note
-Studio Ingegneria Rossi,Ingegnere Strutturista,Milano 20121,+39 02 1234567,https://esempio-rossi.it,Valutazioni vulnerabilità e miglioramento sismico
-Impresa Edile Nord,Impresa Edile,Milano 20121,+39 02 7654321,https://esempio-nord.it,Ripristini strutturali e consolidamenti locali
-Geostudio Lombardia,Geologo,Milano 20122,+39 02 3344556,https://esempio-geostudio.it,Indagini geotecniche e dissesti fondali
-DiagnoStrutture SRL,Diagnostica Strutturale,Milano 20124,+39 02 9988776,https://esempio-diagnostrutture.it,Prove non distruttive e monitoraggi
-Studio Tecnico Bianchi,Ingegnere Strutturista,Roma 00184,+39 06 1122334,https://esempio-bianchi.it,Progettazione interventi su edifici esistenti
-Impresa Centro Restauri,Impresa Edile,Roma 00185,+39 06 4433221,https://esempio-centrorestauri.it,Interventi su murature e c.a.
+nome,categoria,zona,telefono,sito,note,sempre_visibile
+Studio Ingegneria Rossi,Ingegnere Strutturista,Milano 20121,+39 02 1234567,https://esempio-rossi.it,Valutazioni vulnerabilità e miglioramento sismico,FALSE
+Impresa Edile Nord,Impresa Edile,Milano 20121,+39 02 7654321,https://esempio-nord.it,Ripristini strutturali e consolidamenti locali,FALSE
+Geostudio Lombardia,Geologo,Milano 20122,+39 02 3344556,https://esempio-geostudio.it,Indagini geotecniche e dissesti fondali,FALSE
+DiagnoStrutture SRL,Diagnostica Strutturale,Milano 20124,+39 02 9988776,https://esempio-diagnostrutture.it,Prove non distruttive e monitoraggi,FALSE
+Studio Tecnico Bianchi,Ingegnere Strutturista,Roma 00184,+39 06 1122334,https://esempio-bianchi.it,Progettazione interventi su edifici esistenti,FALSE
+Impresa Centro Restauri,Impresa Edile,Roma 00185,+39 06 4433221,https://esempio-centrorestauri.it,Interventi su murature e c.a.,FALSE
 Studio tecnico ingegneristico Marrone,Studio Tecnico Ingegneristico,Lama dei Peligni (CH) - Abruzzo,3277054077,https://,Opera principalmente in Abruzzo; contatti: fabrizio.marrone.ing@gmail.com,TRUE
