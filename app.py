@@ -33,6 +33,7 @@ APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "fabrizio.marrone.ing@gmail.c
 
 USERS_FILE = "users.csv"
 PROFESSIONALS_FILE = "professionisti.csv"
+USER_USAGE_LIMIT = 6
 TRIAL_DAYS = 3
 SUBSCRIPTION_PRICE = 9.90
 STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
@@ -41,31 +42,194 @@ STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
 
 @st.cache_data(ttl=15)
 def load_users():
+    required = [
+        "email",
+        "password_hash",
+        "created_at",
+        "credits_total",
+        "credits_left",
+        "last_login",
+        "abbonato",
+        "verified",
+        "verification_code",
+        "verification_expires",
+    ]
     try:
         df = pd.read_csv(USERS_FILE)
-        required = ["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"]
-        if df.empty or not all(col in df.columns for col in required):
-            emails = df["email"].tolist() if "email" in df.columns else []
+        if df.empty:
             df = pd.DataFrame(columns=required)
-            for e in emails:
-                df = pd.concat([df, pd.DataFrame({"email": [e], "data_registrazione": [datetime.now().strftime("%Y-%m-%d")], "abbonato": [False], "verified": [False], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
-            df.to_csv(USERS_FILE, index=False)
-        for col in ["email", "data_registrazione", "verification_code", "verification_expires"]:
+        else:
+            for col in required:
+                if col not in df.columns:
+                    if col in {"credits_total", "credits_left"}:
+                        df[col] = USER_USAGE_LIMIT
+                    elif col in {"abbonato", "verified"}:
+                        df[col] = False
+                    else:
+                        df[col] = ""
+
+        for col in ["email", "password_hash", "created_at", "last_login", "verification_code", "verification_expires"]:
             if col in df.columns:
                 df[col] = df[col].fillna("").astype(str)
                 df[col] = df[col].replace({"nan": "", "None": ""})
+
+        for col in ["credits_total", "credits_left"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(USER_USAGE_LIMIT).astype(int)
+
         if "verification_code" in df.columns:
             df["verification_code"] = df["verification_code"].apply(
                 lambda value: value[:-2] if isinstance(value, str) and value.endswith(".0") and value[:-2].isdigit() else value
             )
+
         df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
-        if "verified" in df.columns:
-            df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
-        return df
-    except Exception:
-        df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"])
+        df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
+
+        # Persist the migrated schema so future runs are consistent.
         df.to_csv(USERS_FILE, index=False)
         return df
+    except Exception:
+        df = pd.DataFrame(columns=required)
+        df.to_csv(USERS_FILE, index=False)
+        return df
+
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def find_user_row(email: str):
+    users_df = load_users()
+    email_norm = email.strip().lower()
+    user_row = users_df[users_df["email"].astype(str).str.lower() == email_norm]
+    if user_row.empty:
+        return users_df, None, None
+    return users_df, user_row.index[0], user_row.iloc[0]
+
+
+def register_user(email: str, password: str):
+    email_norm = email.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        return False, "Inserisci una email valida."
+    if not password or len(password) < 6:
+        return False, "La password deve avere almeno 6 caratteri."
+
+    users_df, idx, user = find_user_row(email_norm)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    password_hash = hash_password(password)
+
+    if user is not None:
+        existing_hash = str(user.get("password_hash", "")).strip()
+        if existing_hash:
+            return False, "Email già registrata. Accedi con la tua password."
+
+        users_df.at[idx, "password_hash"] = password_hash
+        users_df.at[idx, "created_at"] = now if not str(user.get("created_at", "")).strip() else str(user.get("created_at", ""))
+        users_df.at[idx, "credits_total"] = USER_USAGE_LIMIT
+        users_df.at[idx, "credits_left"] = USER_USAGE_LIMIT
+        users_df.at[idx, "last_login"] = now
+    else:
+        new_row = {
+            "email": email_norm,
+            "password_hash": password_hash,
+            "created_at": now,
+            "credits_total": USER_USAGE_LIMIT,
+            "credits_left": USER_USAGE_LIMIT,
+            "last_login": now,
+            "abbonato": False,
+            "verified": True,
+            "verification_code": "",
+            "verification_expires": "",
+        }
+        users_df = pd.concat([users_df, pd.DataFrame([new_row])], ignore_index=True)
+
+    users_df.to_csv(USERS_FILE, index=False)
+    invalidate_users_cache()
+    return True, "Account creato con successo."
+
+
+def authenticate_user(email: str, password: str):
+    email_norm = email.strip().lower()
+    if not email_norm or "@" not in email_norm:
+        return False, "Inserisci una email valida."
+    if not password:
+        return False, "Inserisci la password."
+
+    users_df, idx, user = find_user_row(email_norm)
+    if user is None:
+        return False, "Email non trovata. Registrati prima."
+
+    stored_hash = str(user.get("password_hash", "")).strip()
+    if not stored_hash:
+        return False, "Account senza password: registralo di nuovo con la password scelta."
+
+    if hash_password(password) != stored_hash:
+        return False, "Password errata."
+
+    users_df.at[idx, "last_login"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    users_df.to_csv(USERS_FILE, index=False)
+    invalidate_users_cache()
+    return True, "Accesso effettuato."
+
+
+def get_user_credit_status(email: str):
+    _, _, user = find_user_row(email)
+    if user is None:
+        return 0, USER_USAGE_LIMIT
+    return int(user.get("credits_left", USER_USAGE_LIMIT)), int(user.get("credits_total", USER_USAGE_LIMIT))
+
+
+def consume_ai_credit(email: str, amount: int = 1):
+    users_df, idx, user = find_user_row(email)
+    if user is None:
+        return False, 0
+
+    remaining = int(user.get("credits_left", USER_USAGE_LIMIT))
+    if remaining < amount:
+        return False, remaining
+
+    remaining -= amount
+    users_df.at[idx, "credits_left"] = remaining
+    users_df.to_csv(USERS_FILE, index=False)
+    invalidate_users_cache()
+    return True, remaining
+
+
+def render_auth_panel(ui, key_prefix: str = "sidebar"):
+    ui.markdown("### Accedi o registrati")
+    ui.write("Crea un account con email e password. Non serve alcun codice di conferma.")
+
+    with ui.form(f"{key_prefix}_login_form"):
+        login_email = ui.text_input("Email", placeholder="nome@dominio.it", key=f"{key_prefix}_login_email")
+        login_password = ui.text_input("Password", type="password", key=f"{key_prefix}_login_password")
+        login_submit = ui.form_submit_button("Accedi")
+        if login_submit:
+            ok, msg = authenticate_user(login_email, login_password)
+            if ok:
+                st.session_state.current_user_email = login_email.strip().lower()
+                st.session_state["current_user_credits"] = get_user_credit_status(login_email)[0]
+                ui.success(msg)
+                st.rerun()
+            else:
+                ui.error(msg)
+
+    with ui.form(f"{key_prefix}_register_form"):
+        register_email = ui.text_input("Email per registrazione", placeholder="nome@dominio.it", key=f"{key_prefix}_register_email")
+        register_password = ui.text_input("Scegli password", type="password", key=f"{key_prefix}_register_password")
+        register_password_confirm = ui.text_input("Conferma password", type="password", key=f"{key_prefix}_register_password_confirm")
+        register_submit = ui.form_submit_button("Crea account")
+        if register_submit:
+            if register_password != register_password_confirm:
+                ui.error("Le password non coincidono.")
+            else:
+                ok, msg = register_user(register_email, register_password)
+                if ok:
+                    st.session_state.current_user_email = register_email.strip().lower()
+                    st.session_state["current_user_credits"] = get_user_credit_status(register_email)[0]
+                    ui.success(msg)
+                    st.rerun()
+                else:
+                    ui.error(msg)
 
 
 @st.cache_data(ttl=300)
@@ -244,31 +408,15 @@ import streamlit.components.v1 as components
 
 # --- PAGINA ISCRIZIONE E PAGAMENTO STRIPE ---
 def pagina_iscrizione_pagamento():
-    st.title("Iscrizione e Prova Gratuita")
-    st.write("Compila il modulo per iscriverti e iniziare la prova gratuita di 3 giorni. **Non serve inserire dati di pagamento per la prova gratuita!**")
-    email = st.text_input("Email", "", key="signup_email")
-    if st.button("Inizia la prova gratuita"):
-        if not email or "@" not in email:
-            st.error("Inserisci una email valida.")
-        else:
-            # Protezione: se per qualche motivo la funzione save_user non è disponibile
-            # (ad esempio deploy non aggiornato), mostriamo un messaggio chiaro invece di sollevare NameError.
-            if "save_user" in globals() and callable(globals().get("save_user")):
-                save_user(email, abbonato=False)
-            else:
-                st.error("Servizio non pronto: riprova fra pochi secondi o aggiorna il deploy (Rerun).")
-                return
-            st.session_state.current_user_email = email.strip().lower()
-            st.success("Prova gratuita attivata! Ora puoi usare subito la tua email dalla pagina principale.")
-            st.info("Al termine della prova gratuita, ti verrà richiesto di abbonarti per continuare.")
-
-    # Il pagamento Stripe viene mostrato solo DOPO la prova gratuita (gestito nella pagina principale)
+    st.title("Registrazione e Accesso")
+    st.write("Crea un account con email e password. Ogni account ha 6 utilizzi AI iniziali.")
+    render_auth_panel(st, key_prefix="page")
     st.markdown("---")
-    st.info("Dopo la prova gratuita, per continuare sarà necessario abbonarsi tramite Stripe. Nessun dato di pagamento richiesto ora per la prova gratuita.")
+    st.info("Ogni richiesta AI consuma un credito del tuo account. Quando i crediti finiscono, puoi richiederne l'aumento manualmente.")
 
 # --- NAVIGAZIONE PAGINE ---
 # Mostro il selettore subito, ma rimando la chiamata della pagina
-selected_page = st.sidebar.selectbox("Naviga", ["App principale", "Iscrizione e Pagamento"])
+selected_page = st.sidebar.selectbox("Naviga", ["App principale", "Registrazione / Accesso"])
 
 components.html(
     """
@@ -302,22 +450,7 @@ st.caption(f"Contatti: {APP_CONTACT_EMAIL}")
 
 st.markdown("---")
 st.header("Accesso rapido")
-st.info("Se hai già un'email verificata, puoi accedere subito anche dalla pagina iniziale.")
-accesso_email_rapido = st.text_input("Email per accesso rapido", placeholder="demo@demo.it", key="accesso_email_rapido")
-if st.button("Accedi con email rapida", key="accesso_rapido_button"):
-    email_norm = accesso_email_rapido.strip().lower()
-    if not email_norm or "@" not in email_norm:
-        st.warning("Inserisci una email valida.")
-    else:
-        utenti = load_users()
-        user_row = utenti[utenti["email"].astype(str).str.lower() == email_norm]
-        if not user_row.empty and bool(user_row.iloc[0].get("verified", False)):
-            st.session_state.current_user_email = email_norm
-            st.rerun()
-        elif not user_row.empty:
-            st.warning("Email presente ma non verificata. Completa la verifica OTP dalla sidebar.")
-        else:
-            st.warning("Email non trovata nel database utenti.")
+st.info("Usa il pannello laterale per accedere o registrarti con email e password. Ogni account ha 6 crediti AI iniziali.")
 
 st.markdown("---")
 st.header("Professionisti Consigliati in Zona")
@@ -613,175 +746,42 @@ def verify_otp(email, code):
 
 # ------------------ end OTP helpers ------------------
 
-# Se l'utente ha selezionato la pagina di iscrizione, renderizza la pagina ORA
-if 'selected_page' in globals() and selected_page == "Iscrizione e Pagamento":
-    # Visualizza il file di verifica Google se presente e inietta il meta tag
+# Se l'utente ha selezionato la pagina di registrazione, mostra solo il pannello dedicato
+if 'selected_page' in globals() and selected_page == "Registrazione / Accesso":
     verification_file = Path("googlea850bad541d5794f.html")
     if verification_file.exists():
         with open(verification_file, "r", encoding="utf-8") as f:
             st.markdown(f.read(), unsafe_allow_html=True)
-    st.sidebar.info("Usa la pagina principale per accedere o attivare la prova gratuita.")
     pagina_iscrizione_pagamento()
     st.stop()
 
-# --- ACCESSO / PROVA GRATUITA ---
+# --- ACCESSO / REGISTRAZIONE ---
 st.sidebar.markdown("---")
-st.sidebar.header("📝 Accedi / Prova Gratuita")
-st.sidebar.write("""
-Accedi con la tua email oppure avvia subito la prova gratuita di 3 giorni senza carta.
-""")
-
-email_config_status = get_email_configuration()
-missing_email_fields = [name for name, value in {
-    "SMTP_HOST": email_config_status["host"],
-    "SMTP_USER": email_config_status["user"],
-    "SMTP_PASSWORD": email_config_status["password"],
-    "EMAIL_FROM": email_config_status["from_addr"],
-}.items() if not value]
-
-if missing_email_fields:
-    st.sidebar.warning(
-        "Email non pronta: mancano " + ", ".join(missing_email_fields) + ". "
-        "Controlla i secrets di Streamlit Cloud."
-    )
-else:
-    mode_label = "SSL" if email_config_status["use_ssl"] or email_config_status["port"] == 465 else "STARTTLS"
-    st.sidebar.info(
-        f"Email configurata correttamente. Modalità invio: {mode_label}, porta {email_config_status['port']}."
-    )
-
-if st.session_state.get("last_email_error"):
-    st.sidebar.error("Ultimo errore email: " + st.session_state["last_email_error"])
-    with st.sidebar.expander("Debug email", expanded=False):
-        st.code(st.session_state["last_email_error"], language="text")
 
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
 
-email_input = st.sidebar.text_input("Email", value=st.session_state.current_user_email, placeholder="nome@dominio.it", key="sidebar_email")
-col_login, col_trial = st.sidebar.columns(2)
-
-if col_login.button("Accedi"):
-    email_norm = email_input.strip().lower()
-    if not email_norm or "@" not in email_norm:
-        st.sidebar.error("Inserisci una email valida.")
-    else:
-        utenti = load_users()
-        user_row = utenti[utenti["email"].astype(str).str.lower() == email_norm]
-        if not user_row.empty and bool(user_row.iloc[0].get("verified", False)):
-            st.session_state.current_user_email = email_norm
-            st.rerun()
-        elif not user_row.empty:
-            st.sidebar.warning("Email presente ma non verificata. Richiedi il codice OTP e completa la verifica.")
-        else:
-            st.sidebar.error("Email non trovata. Usa 'Prova gratuita' per creare l'accesso e verificare l'email.")
-
-if col_trial.button("Prova gratuita"):
-    email_norm = email_input.strip().lower()
-    if not email_norm or "@" not in email_norm:
-        st.sidebar.error("Inserisci una email valida.")
-    else:
-        # Start OTP flow: generate code, save and send
-        code, expires = set_verification_code(email_norm)
-        subject = "Codice di verifica Structure3Age"
-        body = f"Il tuo codice di verifica è: {code} (valido fino alle {expires})"
-        sent = send_email_smtp(email_norm, subject, body)
-        st.session_state['otp_last_sent'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        if sent:
-            st.sidebar.success("Codice di verifica inviato. Controlla la tua email (o la sidebar in test mode) e poi inserisci il codice per entrare.")
-        else:
-            st.sidebar.error("Errore invio codice. Riprova più tardi.")
-
-if st.session_state.current_user_email:
-    st.sidebar.success(f"Accesso attivo: {st.session_state.current_user_email}")
-    if st.sidebar.button("Esci"):
-        st.session_state.current_user_email = ""
-        st.rerun()
-
-# OTP verify input
-otp_code = st.sidebar.text_input("Codice verifica (OTP)", key="otp_code")
-if st.sidebar.button("Verifica codice"):
-    email_norm = st.session_state.current_user_email or email_input.strip().lower()
-    if not email_norm:
-        st.sidebar.error("Inserisci l'email prima di verificare il codice.")
-    else:
-        ok, msg = verify_otp(email_norm, otp_code)
-        if ok:
-            st.sidebar.success(msg)
-            st.session_state.current_user_email = email_norm
-            st.rerun()
-        else:
-            st.sidebar.error(msg)
-
-# Resend button (rate limited)
-if st.sidebar.button("Reinvia codice"):
-    email_norm = email_input.strip().lower()
-    if not email_norm or "@" not in email_norm:
-        st.sidebar.error("Inserisci una email valida.")
-    else:
-        last = st.session_state.get('otp_last_sent')
-        if last:
-            try:
-                last_dt = datetime.strptime(last, "%Y-%m-%dT%H:%M:%S")
-                if (datetime.now() - last_dt).total_seconds() < 60:
-                    st.sidebar.error("Attendi prima di richiedere un nuovo codice (60s).")
-                    st.stop()
-            except Exception:
-                pass
-        code, expires = set_verification_code(email_norm)
-        subject = "Codice di verifica Structure3Age"
-        body = f"Il tuo codice di verifica è: {code} (valido fino alle {expires})"
-        sent = send_email_smtp(email_norm, subject, body)
-        st.session_state['otp_last_sent'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        if sent:
-            st.sidebar.success("Codice reinviato. Controlla la tua email (o la sidebar in test mode).")
-        else:
-            st.sidebar.error("Errore invio codice. Riprova più tardi.")
+render_auth_panel(st.sidebar, key_prefix="sidebar")
 
 username = st.session_state.current_user_email.strip().lower()
 users_df = load_users() if username else pd.DataFrame()
 user_row = users_df[users_df["email"].astype(str).str.lower() == username] if username else pd.DataFrame()
-authentication_status = bool(username) and not user_row.empty and bool(user_row.iloc[0].get("verified", False))
+authentication_status = bool(username) and not user_row.empty and bool(str(user_row.iloc[0].get("password_hash", "")).strip())
 
-# Do NOT auto-create/save users here. Users are created explicitly via signup or
-# when requesting a verification code (`set_verification_code`) so we avoid
-# accidental registrations just by typing an email in the input.
-if authentication_status:
-    in_trial, abbonato = check_trial(username)
-    reg_date = user_row.iloc[0]["data_registrazione"] if not user_row.empty else "-"
-    abbo = user_row.iloc[0]["abbonato"] if not user_row.empty else False
-    days_left = None
-    if not user_row.empty:
-        days_left = TRIAL_DAYS - (datetime.now() - datetime.strptime(reg_date, "%Y-%m-%d")).days
-
-    if not abbonato and (days_left is not None and days_left <= 0):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("<a href='https://buy.stripe.com/test_6oU00i1DSaLZ9zK40R57W00' target='_blank'><button style='width:100%;background:#00c7b4;color:white;font-size:18px;padding:10px;border:none;border-radius:5px;'>Abbonati a €9,90/mese</button></a>", unsafe_allow_html=True)
-        st.sidebar.info("La prova gratuita è finita: ora serve un abbonamento per continuare.")
-    elif in_trial:
-        st.sidebar.info(f"Prova gratuita attiva. Giorni rimanenti: {days_left if days_left is not None and days_left > 0 else 0}")
-    else:
-        st.sidebar.info("Abbonamento attivo.")
-
-    st.sidebar.markdown("---")
-
-else:
-    st.info("Inserisci la tua email nella sidebar per accedere o attivare la prova gratuita.")
+if not authentication_status:
+    st.info("Accedi o crea un account con email e password per continuare.")
     st.stop()
 
-if authentication_status:
-    st.sidebar.markdown("---")
-    st.sidebar.info(f"**DEBUG UTENTE**\nEmail: {username}\nRegistrato: {reg_date}\nAbbonato: {abbo}\nGiorni prova rimasti: {days_left if days_left is not None and days_left > 0 else 0}")
-    st.sidebar.markdown("---")
+current_credits, total_credits = get_user_credit_status(username)
+st.sidebar.success(f"Accesso attivo: {username}")
+st.sidebar.info(f"Crediti AI residui: {current_credits}/{total_credits}")
+if current_credits <= 0:
+    st.sidebar.error("Crediti AI esauriti. Richiedi un reset o un upgrade manuale.")
 
-    if abbonato:
-        st.success("Abbonamento attivo! Puoi usare tutte le funzionalità.")
-    elif in_trial:
-        st.info(f"Benvenuto! Hai una prova gratuita attiva. Giorni rimanenti: {days_left if days_left is not None and days_left > 0 else 0}")
-        st.success("Non serve inserire dati di pagamento per la prova gratuita.")
-    else:
-        st.error("Il periodo di prova gratuita è terminato. Abbonati per continuare a usare l'applicazione.")
-        st.stop()
+if st.sidebar.button("Esci"):
+    st.session_state.current_user_email = ""
+    st.session_state.pop("current_user_credits", None)
+    st.rerun()
 
 st.title("Structural 3age - Analisi Condizione Strutture")
 
@@ -849,7 +849,10 @@ if uploaded_files:
             st.image(file, caption=f"Foto {i+1}", use_column_width=True)
     
     if st.button("Analizza Foto con AI"):
-        if not api_key:
+        current_credits, _ = get_user_credit_status(username)
+        if current_credits <= 0:
+            st.error("Crediti AI esauriti. Non puoi avviare nuove analisi.")
+        elif not api_key:
             st.error("Inserisci la chiave API di OpenAI nella sidebar per procedere.")
         else:
             with st.spinner("Analisi approfondita in corso (Stati Limite, Meccanismi, Interventi)..."):
@@ -867,11 +870,16 @@ if uploaded_files:
                     
                     # Pass the list of files and context directly
                     descrizione = ai_handler.analyze_structure_image(uploaded_files, api_key, project_id, context_info)
-                    
-                    # Store in session state
-                    st.session_state['analysis_result'] = descrizione
-                    st.session_state['uploaded_files'] = uploaded_files
-                    files_to_use = uploaded_files
+                    if str(descrizione).startswith("Errore"):
+                        st.error(descrizione)
+                    else:
+                        # Store in session state
+                        st.session_state['analysis_result'] = descrizione
+                        st.session_state['uploaded_files'] = uploaded_files
+                        files_to_use = uploaded_files
+                        success, remaining = consume_ai_credit(username)
+                        if success:
+                            st.session_state["current_user_credits"] = remaining
                     
                 except Exception as e:
                     st.error(f"Errore durante l'analisi: {e}")
@@ -897,13 +905,25 @@ if uploaded_files:
         st.markdown("---")
         st.subheader("💰 Stima Parametrica Costi")
         if st.button("Calcola Stima Costi (Prezzari DEI/Regionali)"):
-            with st.spinner("Calcolo stima parametrica in corso..."):
+            current_credits, _ = get_user_credit_status(username)
+            if current_credits <= 0:
+                st.error("Crediti AI esauriti. Non puoi calcolare nuove stime.")
+            if not api_key:
+                st.error("Chiave API OpenAI non configurata.")
+            else:
+                with st.spinner("Calcolo stima parametrica in corso..."):
                 try:
                     project_id = os.getenv("OPENAI_PROJECT")
                     source_text = interventi_ai or descrizione
                     stima_costi = ai_handler.estimate_intervention_costs(source_text, api_key, project_id)
-                    st.markdown(stima_costi)
-                    st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
+                    if str(stima_costi).startswith("Errore"):
+                        st.error(stima_costi)
+                    else:
+                        st.markdown(stima_costi)
+                        st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
+                        success, remaining = consume_ai_credit(username)
+                        if success:
+                            st.session_state["current_user_credits"] = remaining
                 except Exception as e:
                     st.error(f"Errore nella stima: {e}")
 
@@ -922,8 +942,20 @@ esito_visivo = {
 
 if st.button("Genera / Aggiorna sintesi finale", key="genera_sintesi_finale_button"):
     try:
-        final_synthesis = synthesis.generate_final_synthesis(dati_generali, vulnerabilita_attese, esito_visivo)
-        st.session_state["final_synthesis"] = final_synthesis
+        current_credits, _ = get_user_credit_status(username)
+        if current_credits <= 0:
+            st.error("Crediti AI esauriti. Non puoi generare nuove sintesi.")
+        elif not api_key:
+            st.error("Chiave API OpenAI non configurata.")
+        else:
+            final_synthesis = synthesis.generate_final_synthesis(dati_generali, vulnerabilita_attese, esito_visivo)
+            if str(final_synthesis.get("quadro_sintetico", "")).startswith("Sintesi finale non disponibile"):
+                st.error(final_synthesis.get("quadro_sintetico", "Sintesi finale non disponibile."))
+            else:
+                st.session_state["final_synthesis"] = final_synthesis
+                success, remaining = consume_ai_credit(username)
+                if success:
+                    st.session_state["current_user_credits"] = remaining
     except Exception as e:
         st.error(f"Errore nella generazione della sintesi finale: {e}")
 
@@ -983,7 +1015,10 @@ st.info("Fai una domanda sulle NTC 2018 o sui documenti caricati. L'AI cercherà
 question = st.text_input("Domanda (es. 'Quali sono i limiti per i nodi non confinati?')")
 
 if st.button("Chiedi all'Assistente"):
-    if not api_key:
+    current_credits, _ = get_user_credit_status(username)
+    if current_credits <= 0:
+        st.error("Crediti AI esauriti. Non puoi fare nuove domande all'assistente.")
+    elif not api_key:
         st.error("Inserisci la chiave API per continuare.")
     elif not question:
         st.warning("Scrivi una domanda prima di procedere.")
@@ -1006,9 +1041,14 @@ if st.button("Chiedi all'Assistente"):
                         # Ask AI
                         project_id = os.getenv("OPENAI_PROJECT")
                         risposta = regulation_handler.ask_regulation_assistant(question, relevant_docs, api_key, project_id)
-                        
-                        st.markdown("### 💡 Risposta dell'Assistente")
-                        st.write(risposta)
+                        if str(risposta).startswith("Errore"):
+                            st.error(risposta)
+                        else:
+                            st.markdown("### 💡 Risposta dell'Assistente")
+                            st.write(risposta)
+                            success, remaining = consume_ai_credit(username)
+                            if success:
+                                st.session_state["current_user_credits"] = remaining
                         
                         with st.expander("Vedi Fonti Utilizzate"):
                             for doc in relevant_docs:
