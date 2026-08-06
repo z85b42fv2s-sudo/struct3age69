@@ -39,7 +39,7 @@ SUBSCRIPTION_PRICE = 9.90
 STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
 STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
 DEMO_EMAIL = "demo@demo.it"
-DEMO_PASSWORD = "demo"
+DEMO_PASSWORD = "demo123"
 
 
 @st.cache_data(ttl=15)
@@ -82,7 +82,7 @@ def load_users():
 
         demo_mask = df["email"].astype(str).str.lower() == DEMO_EMAIL
         if demo_mask.any():
-            df.loc[demo_mask, "password_hash"] = df.loc[demo_mask, "password_hash"].replace("", hash_password(DEMO_PASSWORD))
+            df.loc[demo_mask, "password_hash"] = hash_password(DEMO_PASSWORD)
             df.loc[demo_mask, "credits_total"] = 999999
             df.loc[demo_mask, "credits_left"] = 999999
             df.loc[demo_mask, "verified"] = True
