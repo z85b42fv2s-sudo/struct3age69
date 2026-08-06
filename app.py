@@ -458,17 +458,55 @@ def get_secret(key):
         return st.secrets[key]
     return os.getenv(key)
 
-def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
+
+def get_email_configuration():
     host = get_secret("SMTP_HOST")
-    port = int(get_secret("SMTP_PORT") or 587)
+    port_raw = get_secret("SMTP_PORT")
     user = get_secret("SMTP_USER")
     password = get_secret("SMTP_PASSWORD")
-    from_addr = get_secret("EMAIL_FROM")
+    from_addr = get_secret("EMAIL_FROM") or user
+    use_ssl = str(get_secret("SMTP_USE_SSL") or "").strip().lower() in {"1", "true", "yes", "si"}
+    starttls_raw = str(get_secret("SMTP_STARTTLS") or "true").strip().lower()
+    use_starttls = starttls_raw in {"1", "true", "yes", "si"}
 
-    # fallback: test mode -> show code in sidebar
-    if not all([host, port, user, password, from_addr]):
-        st.sidebar.info(f"[TEST MODE] Email to {to_email}: {subject} -- {body}")
-        return True
+    try:
+        port = int(port_raw) if port_raw else 587
+    except Exception:
+        port = 587
+
+    return {
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "from_addr": from_addr,
+        "use_ssl": use_ssl,
+        "use_starttls": use_starttls,
+    }
+
+def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
+    config = get_email_configuration()
+    host = config["host"]
+    port = config["port"]
+    user = config["user"]
+    password = config["password"]
+    from_addr = config["from_addr"]
+    use_ssl = config["use_ssl"]
+    use_starttls = config["use_starttls"]
+
+    missing = [name for name, value in {
+        "SMTP_HOST": host,
+        "SMTP_USER": user,
+        "SMTP_PASSWORD": password,
+        "EMAIL_FROM": from_addr,
+    }.items() if not value]
+
+    if missing:
+        st.sidebar.error(
+            "Configurazione email mancante: " + ", ".join(missing) + ". "
+            "Imposta i segreti SMTP su Streamlit Cloud per inviare le email di conferma."
+        )
+        return False
 
     msg = EmailMessage()
     msg["From"] = from_addr
@@ -477,10 +515,16 @@ def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
     msg.set_content(body)
 
     try:
-        with smtplib.SMTP(host, port, timeout=10) as smtp:
-            smtp.starttls()
-            smtp.login(user, password)
-            smtp.send_message(msg)
+        if use_ssl or port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+                smtp.login(user, password)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as smtp:
+                if use_starttls:
+                    smtp.starttls()
+                smtp.login(user, password)
+                smtp.send_message(msg)
         return True
     except Exception as e:
         st.error("Errore invio email: " + str(e))
