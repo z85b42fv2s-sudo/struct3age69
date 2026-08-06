@@ -173,6 +173,9 @@ def authenticate_user(email: str, password: str):
 
 
 def get_user_credit_status(email: str):
+    email_norm = email.strip().lower()
+    if email_norm == "demo@demo.it":
+        return 999999, 999999
     _, _, user = find_user_row(email)
     if user is None:
         return 0, USER_USAGE_LIMIT
@@ -180,6 +183,9 @@ def get_user_credit_status(email: str):
 
 
 def consume_ai_credit(email: str, amount: int = 1):
+    email_norm = email.strip().lower()
+    if email_norm == "demo@demo.it":
+        return True, 999999
     users_df, idx, user = find_user_row(email)
     if user is None:
         return False, 0
@@ -774,7 +780,8 @@ if not authentication_status:
 
 current_credits, total_credits = get_user_credit_status(username)
 st.sidebar.success(f"Accesso attivo: {username}")
-st.sidebar.info(f"Crediti AI residui: {current_credits}/{total_credits}")
+credit_label = "∞" if username == "demo@demo.it" else f"{current_credits}/{total_credits}"
+st.sidebar.info(f"Crediti AI residui: {credit_label}")
 if current_credits <= 0:
     st.sidebar.error("Crediti AI esauriti. Richiedi un reset o un upgrade manuale.")
 
@@ -912,20 +919,20 @@ if uploaded_files:
                 st.error("Chiave API OpenAI non configurata.")
             else:
                 with st.spinner("Calcolo stima parametrica in corso..."):
-                try:
-                    project_id = os.getenv("OPENAI_PROJECT")
-                    source_text = interventi_ai or descrizione
-                    stima_costi = ai_handler.estimate_intervention_costs(source_text, api_key, project_id)
-                    if str(stima_costi).startswith("Errore"):
-                        st.error(stima_costi)
-                    else:
-                        st.markdown(stima_costi)
-                        st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
-                        success, remaining = consume_ai_credit(username)
-                        if success:
-                            st.session_state["current_user_credits"] = remaining
-                except Exception as e:
-                    st.error(f"Errore nella stima: {e}")
+                    try:
+                        project_id = os.getenv("OPENAI_PROJECT")
+                        source_text = interventi_ai or descrizione
+                        stima_costi = ai_handler.estimate_intervention_costs(source_text, api_key, project_id)
+                        if str(stima_costi).startswith("Errore"):
+                            st.error(stima_costi)
+                        else:
+                            st.markdown(stima_costi)
+                            st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
+                            success, remaining = consume_ai_credit(username)
+                            if success:
+                                st.session_state["current_user_credits"] = remaining
+                    except Exception as e:
+                        st.error(f"Errore nella stima: {e}")
 
 st.markdown("---")
 st.subheader("3. Sintesi Finale / Report")
