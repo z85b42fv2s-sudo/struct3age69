@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 # Configurazione pagina Streamlit: deve essere la prima chiamata `st.*`
 st.set_page_config(
-    page_title="Structure3Age",
+    page_title="Structure3Age | Analisi strutturale e report AI",
     page_icon="🧱",
     layout="wide"
 )
@@ -27,6 +27,9 @@ try:
     load_dotenv(override=True)
 except Exception:
     pass
+
+APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "").strip()
+APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "fabrizio.marrone.ing@gmail.com").strip()
 
 USERS_FILE = "users.csv"
 PROFESSIONALS_FILE = "professionisti.csv"
@@ -275,6 +278,27 @@ components.html(
     """,
     height=0
 )
+
+st.markdown(
+    """
+    # Structure3Age
+    Piattaforma per pre-screening strutturale, analisi visiva delle foto, sintesi finale del quadro tecnico e supporto normativo sulle NTC 2018.
+
+    ## Cosa fa il servizio
+    - Acquisisce i dati generali della struttura
+    - Elabora le vulnerabilità attese in base a materiale, anno e contesto territoriale
+    - Analizza le immagini della struttura con AI
+    - Produce una sintesi finale e un report PDF scaricabile
+
+    ## Ambito di utilizzo
+    Servizio pensato per aiutare tecnici, committenti e studi professionali a raccogliere un primo quadro delle criticità strutturali prima di un sopralluogo approfondito.
+    """
+)
+
+if APP_PUBLIC_URL:
+    st.caption(f"Sito pubblico: {APP_PUBLIC_URL}")
+
+st.caption(f"Contatti: {APP_CONTACT_EMAIL}")
 
 st.markdown("---")
 st.header("Accesso rapido")
