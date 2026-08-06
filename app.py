@@ -235,6 +235,13 @@ def render_auth_panel(ui, key_prefix: str = "sidebar"):
                 else:
                     ui.error(msg)
 
+    ui.markdown("---")
+    if ui.button("Entra subito come demo", key=f"{key_prefix}_demo_access"):
+        st.session_state.current_user_email = "demo@demo.it"
+        st.session_state["current_user_credits"] = get_user_credit_status("demo@demo.it")[0]
+        ui.success("Accesso demo attivato.")
+        st.rerun()
+
 
 @st.cache_data(ttl=300)
 def load_professionals():
@@ -482,7 +489,10 @@ render_auth_panel(st.sidebar, key_prefix="sidebar")
 username = st.session_state.current_user_email.strip().lower()
 users_df = load_users() if username else pd.DataFrame()
 user_row = users_df[users_df["email"].astype(str).str.lower() == username] if username else pd.DataFrame()
-authentication_status = bool(username) and not user_row.empty and bool(str(user_row.iloc[0].get("password_hash", "")).strip())
+authentication_status = bool(username) and (
+    username == "demo@demo.it"
+    or (not user_row.empty and bool(str(user_row.iloc[0].get("password_hash", "")).strip()))
+)
 
 if not authentication_status:
     st.info("Accedi o crea un account con email e password per continuare.")
@@ -632,7 +642,16 @@ if uploaded_files:
                     try:
                         project_id = os.getenv("OPENAI_PROJECT")
                         source_text = interventi_ai or descrizione
-                        stima_costi = ai_handler.estimate_intervention_costs(source_text, api_key, project_id)
+                        stima_costi = ai_handler.estimate_intervention_costs(
+                            source_text,
+                            api_key,
+                            project_id,
+                            context_data={
+                                "dati_generali": dati_generali,
+                                "vulnerabilita_attese": vulnerabilita_attese,
+                            },
+                            final_synthesis=st.session_state.get("final_synthesis"),
+                        )
                         if str(stima_costi).startswith("Errore"):
                             st.error(stima_costi)
                         else:

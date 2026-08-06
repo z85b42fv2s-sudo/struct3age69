@@ -131,25 +131,61 @@ def analyze_structure_image(image_files, api_key, project_id=None, context_info=
     except Exception as e:
         return f"Errore nella chiamata API: {str(e)}"
 
-def estimate_intervention_costs(analysis_text, api_key, project_id=None):
+def estimate_intervention_costs(analysis_text, api_key, project_id=None, context_data=None, final_synthesis=None):
     """
     Genera una stima parametrica dei costi basata sull'analisi fornita.
     """
     client = OpenAI(api_key=api_key, project=project_id)
 
+    context_lines = []
+    if context_data:
+        dati_generali = context_data.get("dati_generali", {}) or {}
+        vulnerabilita_attese = context_data.get("vulnerabilita_attese", {}) or {}
+        context_lines.append("DATI GENERALI:")
+        context_lines.append(f"- Materiale: {dati_generali.get('materiale', 'N/D')}")
+        context_lines.append(f"- Anno: {dati_generali.get('anno', 'N/D')}")
+        context_lines.append(f"- Zona sismica: {dati_generali.get('zona_sismica', 'N/D')}")
+        context_lines.append(f"- Terreno: {dati_generali.get('terreno', 'N/D')}")
+        context_lines.append(f"- Topografia: {dati_generali.get('topografia', 'N/D')}")
+        context_lines.append(f"- Comune/CAP: {dati_generali.get('comune_cap', 'N/D')}")
+        context_lines.append("")
+        context_lines.append("VULNERABILITA' ATTESE:")
+        context_lines.append(f"- Normativa probabile: {vulnerabilita_attese.get('normativa_probabile', 'N/D')}")
+        for voce in vulnerabilita_attese.get("vulnerabilita_attese", []) or []:
+            context_lines.append(f"- {voce}")
+
+    if final_synthesis:
+        context_lines.append("")
+        context_lines.append("SINTESI FINALE:")
+        context_lines.append(f"- Quadro sintetico: {final_synthesis.get('quadro_sintetico', 'N/D')}")
+        context_lines.append(f"- Indizio di attenzione: {final_synthesis.get('indizio_attenzione', 'N/D')}")
+        context_lines.append(f"- Motivazione: {final_synthesis.get('motivazione_indizio', 'N/D')}")
+        for passo in final_synthesis.get("prossimi_passi", []) or []:
+            context_lines.append(f"- Prossimo passo: {passo}")
+
+    context_block = "\n".join(context_lines).strip()
+
+    if context_block:
+        context_block = f"\n{context_block}\n"
+
     prompt = f"""
     Sei un Computista e Stimatore Edile italiano.
-    Basandoti sull'analisi seguente, estrai gli interventi e produci una stima parametrica dei prezzi unitari medi (riferimento DEI/Regionali 2024).
+    Basandoti sull'analisi seguente e sul contesto tecnico fornito, estrai gli interventi e produci una stima parametrica dei prezzi unitari medi (riferimento DEI/Regionali 2024).
+
+    CONTEXTO TECNICO:
+    {context_block}
 
     ANALISI STRUTTURALE:
     {analysis_text}
 
     Restituisci SOLO una tabella Markdown con colonne:
-    | Problema | Urgenza | Intervento | Unità di Misura | Prezzo Unitario Stimato (€) | Note |
+    | Problema | Urgenza | Intervento | Unità di Misura | Quantità Stimata | Prezzo Unitario Stimato (€) | Totale Stimato (€) | Note |
 
     Regole:
-    - Usa range realistici (min-max).
+    - Usa range realistici (min-max) quando il testo non consente un valore puntuale.
     - Se il dato non è stimabile da testo, scrivi "Da definire in sopralluogo".
+    - Se il contesto consente una stima, indica una quantità plausibile e il totale coerente.
+    - Privilegia interventi coerenti con il materiale, l'anno, la vulnerabilità attesa e la sintesi finale.
     - Nessun testo extra fuori tabella.
     """
 
