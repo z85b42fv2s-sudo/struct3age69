@@ -2,7 +2,7 @@ from pathlib import Path
 import hashlib
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import logic
 import ai_handler
 import synthesis
@@ -51,8 +51,6 @@ def load_users():
         "last_login",
         "abbonato",
         "verified",
-        "verification_code",
-        "verification_expires",
     ]
     try:
         df = pd.read_csv(USERS_FILE)
@@ -68,7 +66,7 @@ def load_users():
                     else:
                         df[col] = ""
 
-        for col in ["email", "password_hash", "created_at", "last_login", "verification_code", "verification_expires"]:
+        for col in ["email", "password_hash", "created_at", "last_login"]:
             if col in df.columns:
                 df[col] = df[col].fillna("").astype(str)
                 df[col] = df[col].replace({"nan": "", "None": ""})
@@ -76,11 +74,6 @@ def load_users():
         for col in ["credits_total", "credits_left"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(USER_USAGE_LIMIT).astype(int)
-
-        if "verification_code" in df.columns:
-            df["verification_code"] = df["verification_code"].apply(
-                lambda value: value[:-2] if isinstance(value, str) and value.endswith(".0") and value[:-2].isdigit() else value
-            )
 
         df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
         df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
@@ -138,8 +131,6 @@ def register_user(email: str, password: str):
             "last_login": now,
             "abbonato": False,
             "verified": True,
-            "verification_code": "",
-            "verification_expires": "",
         }
         users_df = pd.concat([users_df, pd.DataFrame([new_row])], ignore_index=True)
 
@@ -463,294 +454,6 @@ st.header("Professionisti Consigliati in Zona")
 st.info("Indicazioni orientative: verifica sempre abilitazioni, referenze e preventivi prima di affidare incarichi.")
 professionisti_localita = st.text_input("CAP o Comune per cercare professionisti", placeholder="Es. 20121 oppure Milano", key="professionisti_localita_public")
 render_professionals_section(professionisti_localita)
-
-# --- AUTENTICAZIONE UTENTE ---
-@st.cache_data(ttl=15)
-def load_users():
-    try:
-        df = pd.read_csv(USERS_FILE)
-        # Ensure required columns exist; if not, recreate with full schema
-        required = ["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"]
-        if df.empty or not all(col in df.columns for col in required):
-            # preserve existing emails if present
-            emails = df["email"].tolist() if "email" in df.columns else []
-            df = pd.DataFrame(columns=required)
-            for e in emails:
-                df = pd.concat([df, pd.DataFrame({"email": [e], "data_registrazione": [datetime.now().strftime("%Y-%m-%d")], "abbonato": [False], "verified": [False], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
-            df.to_csv(USERS_FILE, index=False)
-        # normalize text columns so OTPs are never treated as numbers by pandas
-        for col in ["email", "data_registrazione", "verification_code", "verification_expires"]:
-            if col in df.columns:
-                df[col] = df[col].fillna("").astype(str)
-                df[col] = df[col].replace({"nan": "", "None": ""})
-        if "verification_code" in df.columns:
-            df["verification_code"] = df["verification_code"].apply(
-                lambda value: value[:-2] if isinstance(value, str) and value.endswith(".0") and value[:-2].isdigit() else value
-            )
-        # normalize boolean columns
-        df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
-        if "verified" in df.columns:
-            df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
-        return df
-    except Exception:
-        df = pd.DataFrame(columns=["email", "data_registrazione", "abbonato", "verified", "verification_code", "verification_expires"])
-        df.to_csv(USERS_FILE, index=False)
-        return df
-
-
-def invalidate_users_cache():
-    try:
-        load_users.clear()
-    except Exception:
-        pass
-
-
-@st.cache_data(ttl=300)
-def load_professionals():
-    try:
-        df = pd.read_csv(PROFESSIONALS_FILE)
-        required = ["nome", "categoria", "zona", "telefono", "sito", "note"]
-        if not all(col in df.columns for col in required):
-            return pd.DataFrame(columns=required)
-        for col in required:
-            df[col] = df[col].fillna("").astype(str)
-        return df
-    except Exception:
-        return pd.DataFrame(columns=["nome", "categoria", "zona", "telefono", "sito", "note"])
-
-
-def suggest_professionals(localita: str, categoria: str = ""):
-    df = load_professionals()
-    if df.empty:
-        return df
-    filtered = df
-    if localita:
-        localita_norm = localita.strip().lower()
-        filtered = filtered[filtered["zona"].str.lower().str.contains(localita_norm, na=False)]
-    if categoria and categoria != "Tutte":
-        filtered = filtered[filtered["categoria"].str.lower() == categoria.strip().lower()]
-    return filtered
-
-
-def render_professionals_section(localita_value: str):
-    categoria_prof = st.selectbox(
-        "Tipo di professionista",
-        ["Tutte", "Ingegnere Strutturista", "Impresa Edile", "Geologo", "Diagnostica Strutturale"],
-        key="categoria_prof_select",
-    )
-
-    if st.button("Trova professionisti in zona", key="trova_professionisti_button"):
-        if not localita_value.strip():
-            st.warning("Inserisci CAP o Comune nella sezione dati generali.")
-        else:
-            risultati_prof = suggest_professionals(localita_value, categoria_prof)
-            if risultati_prof.empty:
-                st.warning("Nessun professionista trovato per i filtri selezionati.")
-            else:
-                st.success(f"Trovati {len(risultati_prof)} professionisti.")
-                for _, row in risultati_prof.iterrows():
-                    st.markdown(
-                        f"**{row['nome']}**  \n"
-                        f"Categoria: {row['categoria']}  \n"
-                        f"Zona: {row['zona']}  \n"
-                        f"Telefono: {row['telefono']}  \n"
-                        f"Sito: {row['sito']}  \n"
-                        f"Note: {row['note']}"
-                    )
-
-def save_user(email, abbonato=False, verified=False):
-    df = load_users()
-    email = email.strip().lower()
-    now = datetime.now().strftime("%Y-%m-%d")
-    if email in df["email"].astype(str).str.lower().values:
-        idx = df[df["email"].astype(str).str.lower() == email].index[0]
-        df.at[idx, "data_registrazione"] = now
-        df.at[idx, "abbonato"] = abbonato
-        # preserve verified unless explicitly True
-        if verified:
-            df.at[idx, "verified"] = True
-    else:
-        df = pd.concat([df, pd.DataFrame({"email": [email], "data_registrazione": [now], "abbonato": [abbonato], "verified": [verified], "verification_code": [""], "verification_expires": [""]})], ignore_index=True)
-    df.to_csv(USERS_FILE, index=False)
-    invalidate_users_cache()
-
-def check_trial(email):
-    df = load_users()
-    email = email.strip().lower()
-    user = df[df["email"].astype(str).str.lower() == email]
-    if user.empty:
-        return True, None
-    reg_date = datetime.strptime(user.iloc[0]["data_registrazione"], "%Y-%m-%d")
-    days_used = (datetime.now() - reg_date).days
-    abbonato = user.iloc[0]["abbonato"]
-    in_trial = days_used < TRIAL_DAYS
-    return in_trial or abbonato, abbonato
-
-
-# ------------------ OTP / Email helpers ------------------
-import random
-import smtplib
-from email.message import EmailMessage
-import traceback
-
-def get_secret(key):
-    if hasattr(st, "secrets") and key in st.secrets:
-        return st.secrets[key]
-    return os.getenv(key)
-
-
-def get_email_configuration():
-    host = get_secret("SMTP_HOST")
-    port_raw = get_secret("SMTP_PORT")
-    user = get_secret("SMTP_USER")
-    password = get_secret("SMTP_PASSWORD")
-    from_addr = get_secret("EMAIL_FROM") or user
-    use_ssl = str(get_secret("SMTP_USE_SSL") or "").strip().lower() in {"1", "true", "yes", "si"}
-    starttls_raw = str(get_secret("SMTP_STARTTLS") or "true").strip().lower()
-    use_starttls = starttls_raw in {"1", "true", "yes", "si"}
-
-    try:
-        port = int(port_raw) if port_raw else 587
-    except Exception:
-        port = 587
-
-    return {
-        "host": host,
-        "port": port,
-        "user": user,
-        "password": password,
-        "from_addr": from_addr,
-        "use_ssl": use_ssl,
-        "use_starttls": use_starttls,
-    }
-
-def send_email_smtp(to_email: str, subject: str, body: str) -> bool:
-    config = get_email_configuration()
-    host = config["host"]
-    port = config["port"]
-    user = config["user"]
-    password = config["password"]
-    from_addr = config["from_addr"]
-    use_ssl = config["use_ssl"]
-    use_starttls = config["use_starttls"]
-
-    missing = [name for name, value in {
-        "SMTP_HOST": host,
-        "SMTP_USER": user,
-        "SMTP_PASSWORD": password,
-        "EMAIL_FROM": from_addr,
-    }.items() if not value]
-
-    if missing:
-        st.sidebar.error(
-            "Configurazione email mancante: " + ", ".join(missing) + ". "
-            "Imposta i segreti SMTP su Streamlit Cloud per inviare le email di conferma."
-        )
-        return False
-
-    msg = EmailMessage()
-    msg["From"] = from_addr
-    msg["To"] = to_email
-    msg["Subject"] = subject
-    msg.set_content(body)
-
-    try:
-        if use_ssl or port == 465:
-            with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
-                smtp.ehlo()
-                smtp.login(user, password)
-                smtp.send_message(msg)
-        else:
-            with smtplib.SMTP(host, port, timeout=15) as smtp:
-                smtp.ehlo()
-                if use_starttls:
-                    smtp.starttls()
-                    smtp.ehlo()
-                smtp.login(user, password)
-                smtp.send_message(msg)
-        st.session_state["last_email_error"] = ""
-        return True
-    except Exception as e:
-        error_type = type(e).__name__
-        error_message = str(e)
-        smtp_code = getattr(e, "smtp_code", "")
-        smtp_error = getattr(e, "smtp_error", "")
-        detailed_error = f"{error_type}: {error_message}"
-        if smtp_code or smtp_error:
-            detailed_error += f" | SMTP {smtp_code}: {smtp_error}"
-        detailed_error += "\n" + traceback.format_exc(limit=1)
-        hint = ""
-        if "gmail" in str(host).lower():
-            hint = " Se usi Gmail, serve quasi sempre una password per app, non la password normale dell'account."
-        elif "auth" in error_message.lower() or "password" in error_message.lower():
-            hint = " Verifica credenziali SMTP e restrizioni del provider."
-        elif "timeout" in error_message.lower() or "refused" in error_message.lower():
-            hint = " Controlla host, porta e firewall del provider SMTP."
-
-        st.session_state["last_email_error"] = detailed_error + hint
-        st.session_state["last_email_error_type"] = error_type
-        st.session_state["last_email_error_code"] = smtp_code
-        st.error("Errore invio email: " + detailed_error + hint)
-        return False
-
-
-def generate_otp():
-    return f"{random.randint(0, 999999):06d}"
-
-def set_verification_code(email, minutes=10):
-    # create or update user with a verification code and expiry
-    df = load_users()
-    email = email.strip().lower()
-    now = datetime.now()
-    expires = (now + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S")
-    code = generate_otp()
-    if email in df["email"].astype(str).str.lower().values:
-        idx = df[df["email"].astype(str).str.lower() == email].index[0]
-        df.at[idx, "verification_code"] = code
-        df.at[idx, "verification_expires"] = expires
-        df.at[idx, "verified"] = False
-    else:
-        df = pd.concat([df, pd.DataFrame({
-            "email": [email],
-            "data_registrazione": [now.strftime("%Y-%m-%d")],
-            "abbonato": [False],
-            "verified": [False],
-            "verification_code": [code],
-            "verification_expires": [expires]
-        })], ignore_index=True)
-    df.to_csv(USERS_FILE, index=False)
-    invalidate_users_cache()
-    return code, expires
-
-
-def verify_otp(email, code):
-    df = load_users()
-    email = email.strip().lower()
-    user = df[df["email"].astype(str).str.lower() == email]
-    if user.empty:
-        return False, "Email non trovata"
-    stored = str(user.iloc[0]["verification_code"]).strip()
-    expires = user.iloc[0]["verification_expires"]
-    if not stored:
-        return False, "Nessun codice inviato. Richiedi un nuovo codice."
-    try:
-        exp_dt = datetime.strptime(expires, "%Y-%m-%dT%H:%M:%S")
-    except Exception:
-        return False, "Codice non valido. Richiedi nuovo codice."
-    if datetime.now() > exp_dt:
-        return False, "Codice scaduto. Richiedi un nuovo codice."
-    if code.strip() != stored:
-        return False, "Codice errato."
-    # OK -> mark verified and clear code
-    idx = df[df["email"].astype(str).str.lower() == email].index[0]
-    df.at[idx, "verified"] = True
-    df.at[idx, "verification_code"] = ""
-    df.at[idx, "verification_expires"] = ""
-    df.to_csv(USERS_FILE, index=False)
-    invalidate_users_cache()
-    return True, "Email verificata"
-
-# ------------------ end OTP helpers ------------------
 
 # Se l'utente ha selezionato la pagina di registrazione, mostra solo il pannello dedicato
 if 'selected_page' in globals() and selected_page == "Registrazione / Accesso":
