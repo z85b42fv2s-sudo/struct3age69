@@ -87,6 +87,13 @@ def load_users():
         return df
 
 
+def invalidate_users_cache():
+    try:
+        load_users.clear()
+    except Exception:
+        pass
+
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
