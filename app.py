@@ -38,6 +38,8 @@ TRIAL_DAYS = 3
 SUBSCRIPTION_PRICE = 9.90
 STRIPE_PUBLIC_KEY = "mk_1ShT5mAHjVSlqjiBcdK8asiZ"
 STRIPE_SECRET_KEY = "mk_1ShT6iAHjVSlqjiBN9zJb2tO"
+DEMO_EMAIL = "demo@demo.it"
+DEMO_PASSWORD = "demo"
 
 
 @st.cache_data(ttl=15)
@@ -78,6 +80,14 @@ def load_users():
         df["abbonato"] = df["abbonato"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
         df["verified"] = df["verified"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
 
+        demo_mask = df["email"].astype(str).str.lower() == DEMO_EMAIL
+        if demo_mask.any():
+            df.loc[demo_mask, "password_hash"] = df.loc[demo_mask, "password_hash"].replace("", hash_password(DEMO_PASSWORD))
+            df.loc[demo_mask, "credits_total"] = 999999
+            df.loc[demo_mask, "credits_left"] = 999999
+            df.loc[demo_mask, "verified"] = True
+            df.loc[demo_mask, "abbonato"] = True
+
         # Persist the migrated schema so future runs are consistent.
         df.to_csv(USERS_FILE, index=False)
         return df
@@ -117,6 +127,36 @@ def register_user(email: str, password: str):
     users_df, idx, user = find_user_row(email_norm)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     password_hash = hash_password(password)
+
+    if email_norm == DEMO_EMAIL:
+        users_df = load_users()
+        demo_mask = users_df["email"].astype(str).str.lower() == DEMO_EMAIL
+        if demo_mask.any():
+            demo_idx = users_df[demo_mask].index[0]
+            users_df.at[demo_idx, "password_hash"] = hash_password(DEMO_PASSWORD)
+            users_df.at[demo_idx, "credits_total"] = 999999
+            users_df.at[demo_idx, "credits_left"] = 999999
+            users_df.at[demo_idx, "verified"] = True
+            users_df.at[demo_idx, "abbonato"] = True
+            users_df.at[demo_idx, "last_login"] = now
+            users_df.to_csv(USERS_FILE, index=False)
+            invalidate_users_cache()
+            return True, "Account demo già pronto."
+
+        new_row = {
+            "email": DEMO_EMAIL,
+            "password_hash": hash_password(DEMO_PASSWORD),
+            "created_at": now,
+            "credits_total": 999999,
+            "credits_left": 999999,
+            "last_login": now,
+            "abbonato": True,
+            "verified": True,
+        }
+        users_df = pd.concat([users_df, pd.DataFrame([new_row])], ignore_index=True)
+        users_df.to_csv(USERS_FILE, index=False)
+        invalidate_users_cache()
+        return True, "Account demo già pronto."
 
     if user is not None:
         existing_hash = str(user.get("password_hash", "")).strip()
@@ -172,7 +212,7 @@ def authenticate_user(email: str, password: str):
 
 def get_user_credit_status(email: str):
     email_norm = email.strip().lower()
-    if email_norm == "demo@demo.it":
+    if email_norm == DEMO_EMAIL:
         return 999999, 999999
     _, _, user = find_user_row(email)
     if user is None:
@@ -182,7 +222,7 @@ def get_user_credit_status(email: str):
 
 def consume_ai_credit(email: str, amount: int = 1):
     email_norm = email.strip().lower()
-    if email_norm == "demo@demo.it":
+    if email_norm == DEMO_EMAIL:
         return True, 999999
     users_df, idx, user = find_user_row(email)
     if user is None:
@@ -237,8 +277,8 @@ def render_auth_panel(ui, key_prefix: str = "sidebar"):
 
     ui.markdown("---")
     if ui.button("Entra subito come demo", key=f"{key_prefix}_demo_access"):
-        st.session_state.current_user_email = "demo@demo.it"
-        st.session_state["current_user_credits"] = get_user_credit_status("demo@demo.it")[0]
+        st.session_state.current_user_email = DEMO_EMAIL
+        st.session_state["current_user_credits"] = get_user_credit_status(DEMO_EMAIL)[0]
         ui.success("Accesso demo attivato.")
         st.rerun()
 
@@ -483,6 +523,10 @@ st.sidebar.markdown("---")
 
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
+
+if not st.session_state.current_user_email:
+    st.session_state.current_user_email = DEMO_EMAIL
+    st.session_state["current_user_credits"] = get_user_credit_status(DEMO_EMAIL)[0]
 
 render_auth_panel(st.sidebar, key_prefix="sidebar")
 
