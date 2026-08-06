@@ -228,8 +228,9 @@ def estimate_intervention_costs(analysis_text, api_key, project_id=None, context
     Regole:
     - Non fare una semplice stima generica: scegli interventi specifici e coerenti con i dati dell'edificio.
     - Se mancano dati chiave, usa ipotesi esplicite e conserva l'affidabilità su "Bassa" o "Media".
-    - Se il dato non è stimabile con ragionevole affidabilità, scrivi "Da definire in sopralluogo".
-    - Usa intervalli realistici min-max per ogni costo.
+    - Per ogni intervento indica sempre un intervallo di costo probabile min-max, anche se i dati sono incompleti.
+    - Non lasciare mai il costo come singolo valore puntuale e non rimandare la stima con formule del tipo "da definire".
+    - Se l'incertezza è alta, allarga il range ma fornisci comunque una stima probabilistica motivata.
     - Il totale minimo e massimo deve essere coerente con la somma delle voci.
     - Nessun testo extra fuori dalle sezioni richieste.
     """
