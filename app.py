@@ -112,64 +112,118 @@ def render_professionals_section(localita_value: str):
         key="categoria_prof_select",
     )
 
-    if st.button("Trova professionisti in zona", key="trova_professionisti_button"):
-        if not localita_value.strip():
-            st.warning("Inserisci CAP o Comune nella sezione dati generali.")
-        else:
-            risultati_prof = suggest_professionals(localita_value, categoria_prof)
-            if risultati_prof.empty:
-                st.warning("Nessun professionista trovato per i filtri selezionati.")
-            else:
-                st.success(f"Trovati {len(risultati_prof)} professionisti.")
-                for _, row in risultati_prof.iterrows():
-                    sito = row.get("sito", "").strip() or "—"
-                    telefono = row.get("telefono", "").strip() or "—"
-                    note = row.get("note", "").strip() or "—"
-                    categoria = row.get("categoria", "").strip() or "—"
-                    zona = row.get("zona", "").strip() or "—"
+    all_professionals = load_professionals()
+    featured_professionals = all_professionals[all_professionals["sempre_visibile"]] if not all_professionals.empty else pd.DataFrame()
 
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,41,59,0.96));
-                            border: 1px solid rgba(148,163,184,0.35);
-                            border-radius: 18px;
-                            padding: 18px 20px;
-                            margin: 0 0 16px 0;
-                            box-shadow: 0 10px 25px rgba(15,23,42,0.18);
-                            color: #F8FAFC;
-                        ">
-                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
-                                <div>
-                                    <div style="font-size:20px;font-weight:800;letter-spacing:0.2px;">{row['nome']}</div>
-                                    <div style="margin-top:6px;font-size:13px;color:#CBD5E1;">{categoria}</div>
-                                </div>
-                                <div style="background:rgba(34,197,94,0.15);color:#86EFAC;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;">
-                                    Presenza locale
-                                </div>
+    if not featured_professionals.empty:
+        st.markdown("### ⭐ Uffici in evidenza")
+        for _, row in featured_professionals.iterrows():
+            sito = row.get("sito", "").strip() or "—"
+            telefono = row.get("telefono", "").strip() or "—"
+            note = row.get("note", "").strip() or "—"
+            categoria = row.get("categoria", "").strip() or "—"
+            zona = row.get("zona", "").strip() or "—"
+
+            st.markdown(
+                f"""
+                <div style="
+                    background: linear-gradient(135deg, rgba(14,116,144,0.14), rgba(15,23,42,0.96));
+                    border: 1px solid rgba(56,189,248,0.4);
+                    border-radius: 18px;
+                    padding: 18px 20px;
+                    margin: 0 0 16px 0;
+                    box-shadow: 0 10px 25px rgba(15,23,42,0.18);
+                    color: #F8FAFC;
+                ">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:20px;font-weight:800;letter-spacing:0.2px;">{row['nome']}</div>
+                            <div style="margin-top:6px;font-size:13px;color:#BAE6FD;">{categoria}</div>
+                        </div>
+                        <div style="background:rgba(56,189,248,0.18);color:#7DD3FC;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;">
+                            Sempre visibile
+                        </div>
+                    </div>
+                    <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Zona operativa</div>
+                            <div style="font-size:14px;margin-top:2px;">{zona}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Telefono</div>
+                            <div style="font-size:14px;margin-top:2px;">{telefono}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Sito web</div>
+                            <div style="font-size:14px;margin-top:2px;">{sito}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Note</div>
+                            <div style="font-size:14px;margin-top:2px;">{note}</div>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    if st.button("Trova professionisti in zona", key="trova_professionisti_button"):
+        risultati_prof = suggest_professionals(localita_value, categoria_prof)
+        non_featured = risultati_prof[~risultati_prof["sempre_visibile"]] if not risultati_prof.empty else risultati_prof
+
+        if non_featured.empty:
+            st.info("Nessun risultato locale aggiuntivo trovato. Gli uffici in evidenza restano visibili sopra.")
+        else:
+            st.success(f"Trovati {len(non_featured)} professionisti locali.")
+            for _, row in non_featured.iterrows():
+                sito = row.get("sito", "").strip() or "—"
+                telefono = row.get("telefono", "").strip() or "—"
+                note = row.get("note", "").strip() or "—"
+                categoria = row.get("categoria", "").strip() or "—"
+                zona = row.get("zona", "").strip() or "—"
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,41,59,0.96));
+                        border: 1px solid rgba(148,163,184,0.35);
+                        border-radius: 18px;
+                        padding: 18px 20px;
+                        margin: 0 0 16px 0;
+                        box-shadow: 0 10px 25px rgba(15,23,42,0.18);
+                        color: #F8FAFC;
+                    ">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+                            <div>
+                                <div style="font-size:20px;font-weight:800;letter-spacing:0.2px;">{row['nome']}</div>
+                                <div style="margin-top:6px;font-size:13px;color:#CBD5E1;">{categoria}</div>
                             </div>
-                            <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
-                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Zona operativa</div>
-                                    <div style="font-size:14px;margin-top:2px;">{zona}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
-                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Telefono</div>
-                                    <div style="font-size:14px;margin-top:2px;">{telefono}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
-                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Sito web</div>
-                                    <div style="font-size:14px;margin-top:2px;">{sito}</div>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
-                                    <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Note</div>
-                                    <div style="font-size:14px;margin-top:2px;">{note}</div>
-                                </div>
+                            <div style="background:rgba(34,197,94,0.15);color:#86EFAC;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;">
+                                Presenza locale
                             </div>
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Zona operativa</div>
+                                <div style="font-size:14px;margin-top:2px;">{zona}</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Telefono</div>
+                                <div style="font-size:14px;margin-top:2px;">{telefono}</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Sito web</div>
+                                <div style="font-size:14px;margin-top:2px;">{sito}</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;">
+                                <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.08em;">Note</div>
+                                <div style="font-size:14px;margin-top:2px;">{note}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
 
 def compute_uploaded_files_hash(uploaded_files):
