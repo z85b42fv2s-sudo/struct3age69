@@ -86,19 +86,18 @@ def suggest_professionals(localita: str, categoria: str = ""):
     df = load_professionals()
     if df.empty:
         return df
-    filtered = df.copy()
-    if categoria and categoria != "Tutte":
-        filtered = filtered[filtered["categoria"].str.lower() == categoria.strip().lower()]
+    df = df.copy()
+    always_visible = df[df["sempre_visibile"]]
+    normal_df = df[~df["sempre_visibile"]].copy()
 
-    always_visible = filtered[filtered["sempre_visibile"]]
+    if categoria and categoria != "Tutte":
+        normal_df = normal_df[normal_df["categoria"].str.lower() == categoria.strip().lower()]
 
     if localita:
         localita_norm = localita.strip().lower()
-        local_matches = filtered[filtered["zona"].str.lower().str.contains(localita_norm, na=False)]
-        filtered = pd.concat([local_matches, always_visible], ignore_index=True)
-    else:
-        filtered = pd.concat([filtered, always_visible], ignore_index=True)
+        normal_df = normal_df[normal_df["zona"].str.lower().str.contains(localita_norm, na=False)]
 
+    filtered = pd.concat([normal_df, always_visible], ignore_index=True)
     if filtered.empty:
         return filtered
 
