@@ -607,6 +607,25 @@ st.sidebar.write("""
 Accedi con la tua email oppure avvia subito la prova gratuita di 3 giorni senza carta.
 """)
 
+email_config_status = get_email_configuration()
+missing_email_fields = [name for name, value in {
+    "SMTP_HOST": email_config_status["host"],
+    "SMTP_USER": email_config_status["user"],
+    "SMTP_PASSWORD": email_config_status["password"],
+    "EMAIL_FROM": email_config_status["from_addr"],
+}.items() if not value]
+
+if missing_email_fields:
+    st.sidebar.warning(
+        "Email non pronta: mancano " + ", ".join(missing_email_fields) + ". "
+        "Controlla i secrets di Streamlit Cloud."
+    )
+else:
+    mode_label = "SSL" if email_config_status["use_ssl"] or email_config_status["port"] == 465 else "STARTTLS"
+    st.sidebar.info(
+        f"Email configurata correttamente. Modalità invio: {mode_label}, porta {email_config_status['port']}."
+    )
+
 if "current_user_email" not in st.session_state:
     st.session_state.current_user_email = ""
 
