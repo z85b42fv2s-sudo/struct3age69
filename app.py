@@ -74,21 +74,35 @@ def load_professionals():
             return pd.DataFrame(columns=required)
         for col in required:
             df[col] = df[col].fillna("").astype(str)
+        if "sempre_visibile" not in df.columns:
+            df["sempre_visibile"] = False
+        df["sempre_visibile"] = df["sempre_visibile"].apply(lambda value: str(value).strip().lower() in {"true", "1", "yes", "si"})
         return df
     except Exception:
-        return pd.DataFrame(columns=["nome", "categoria", "zona", "telefono", "sito", "note"])
+        return pd.DataFrame(columns=["nome", "categoria", "zona", "telefono", "sito", "note", "sempre_visibile"])
 
 
 def suggest_professionals(localita: str, categoria: str = ""):
     df = load_professionals()
     if df.empty:
         return df
-    filtered = df
-    if localita:
-        localita_norm = localita.strip().lower()
-        filtered = filtered[filtered["zona"].str.lower().str.contains(localita_norm, na=False)]
+    filtered = df.copy()
     if categoria and categoria != "Tutte":
         filtered = filtered[filtered["categoria"].str.lower() == categoria.strip().lower()]
+
+    always_visible = filtered[filtered["sempre_visibile"]]
+
+    if localita:
+        localita_norm = localita.strip().lower()
+        local_matches = filtered[filtered["zona"].str.lower().str.contains(localita_norm, na=False)]
+        filtered = pd.concat([local_matches, always_visible], ignore_index=True)
+    else:
+        filtered = pd.concat([filtered, always_visible], ignore_index=True)
+
+    if filtered.empty:
+        return filtered
+
+    filtered = filtered.drop_duplicates(subset=["nome", "telefono", "sito", "zona"])
     return filtered
 
 
