@@ -131,7 +131,7 @@ def analyze_structure_image(image_files, api_key, project_id=None, context_info=
     except Exception as e:
         return f"Errore nella chiamata API: {str(e)}"
 
-def estimate_intervention_costs(analysis_text, api_key, project_id=None, context_data=None, final_synthesis=None):
+def estimate_intervention_costs(analysis_text, api_key, project_id=None, context_data=None, final_synthesis=None, image_files=None):
     """
     Genera una stima parametrica dei costi basata sull'analisi fornita.
     """
@@ -207,6 +207,8 @@ def estimate_intervention_costs(analysis_text, api_key, project_id=None, context
     ANALISI STRUTTURALE:
     {analysis_text}
 
+    {"RIVEDI ANCHE LE FOTO CARICATE E USA LE EVIDENZE VISIVE PER STRINGERE I RANGE DI COSTO." if image_files else ""}
+
     Restituisci la risposta in Markdown, con questa struttura obbligatoria:
 
     ## Tabella costi interventi
@@ -235,10 +237,28 @@ def estimate_intervention_costs(analysis_text, api_key, project_id=None, context
     - Nessun testo extra fuori dalle sezioni richieste.
     """
 
+    messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+
+    if image_files:
+        if not isinstance(image_files, list):
+            image_files = [image_files]
+
+        for img_file in image_files:
+            try:
+                base64_image = encode_image(img_file)
+                messages[0]["content"].append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                    }
+                )
+            except Exception:
+                continue
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             max_tokens=1000,
         )
         return response.choices[0].message.content

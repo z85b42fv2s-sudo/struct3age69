@@ -447,6 +447,108 @@ def compute_uploaded_files_hash(uploaded_files):
             continue
     return hasher.hexdigest()
 
+
+def render_cost_estimate_output(cost_text: str):
+    if not cost_text:
+        st.warning("Nessun output di costo disponibile.")
+        return
+
+    parts = [part.strip() for part in cost_text.split("## ") if part.strip()]
+    section_map = {}
+    for part in parts:
+        lines = part.splitlines()
+        title = lines[0].strip()
+        body = "\n".join(lines[1:]).strip()
+        section_map[title.lower()] = body
+
+    table_section = section_map.get("tabella costi interventi")
+    if table_section:
+        try:
+            table_lines = [line.strip() for line in table_section.splitlines() if line.strip().startswith("|")]
+            table_lines = [line for line in table_lines if set(line.replace("|", "").replace(":", "").replace("-", "").replace(" ", ""))]
+            if len(table_lines) >= 2:
+                headers = [cell.strip() for cell in table_lines[0].strip("|").split("|")]
+                rows = []
+                for line in table_lines[1:]:
+                    cells = [cell.strip() for cell in line.strip("|").split("|")]
+                    if len(cells) == len(headers):
+                        rows.append(cells)
+                table_df = pd.DataFrame(rows, columns=headers)
+            else:
+                table_df = pd.DataFrame()
+
+            st.markdown(
+                """
+                <style>
+                .cost-table-wrap {
+                    border: 1px solid rgba(46, 125, 50, 0.18);
+                    border-radius: 18px;
+                    overflow: hidden;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+                    margin-top: 0.5rem;
+                    margin-bottom: 1rem;
+                }
+                .cost-table-wrap table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 0.92rem;
+                }
+                .cost-table-wrap thead th {
+                    background: linear-gradient(135deg, #143d59, #2e7d32);
+                    color: white;
+                    padding: 0.8rem 0.7rem;
+                    text-align: left;
+                }
+                .cost-table-wrap tbody td {
+                    padding: 0.75rem 0.7rem;
+                    border-top: 1px solid rgba(20, 61, 89, 0.08);
+                    vertical-align: top;
+                }
+                .cost-table-wrap tbody tr:nth-child(even) {
+                    background: rgba(20, 61, 89, 0.03);
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            if not table_df.empty:
+                st.markdown(f'<div class="cost-table-wrap">{table_df.to_html(index=False, escape=False)}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown("### Tabella costi interventi")
+                st.markdown(table_section)
+        except Exception:
+            st.markdown("### Tabella costi interventi")
+            st.markdown(table_section)
+    else:
+        st.markdown(cost_text)
+
+    total_section = section_map.get("costo totale stimato")
+    if total_section:
+        total_min = "N/D"
+        total_max = "N/D"
+        for line in total_section.splitlines():
+            low = line.lower().strip()
+            if low.startswith("- minimo") or low.startswith("minimo"):
+                total_min = line.split(":", 1)[-1].strip(" -")
+            elif low.startswith("- massimo") or low.startswith("massimo"):
+                total_max = line.split(":", 1)[-1].strip(" -")
+
+        st.markdown("### 💶 Riepilogo Costo Totale")
+        col_min, col_max = st.columns(2)
+        col_min.metric("Costo minimo", total_min)
+        col_max.metric("Costo massimo", total_max)
+
+    for title, emoji in [
+        ("costo totale stimato", "💶"),
+        ("ipotesi adottate", "🧾"),
+        ("lavorazioni non comprese", "🚫"),
+        ("fattori che possono modificare il costo", "📈"),
+    ]:
+        body = section_map.get(title)
+        if body and title != "costo totale stimato":
+            st.markdown(f"### {emoji} {title.title()}")
+            st.markdown(body)
+
 # Meta tag Google Search Console (iniettato con component)
 import streamlit.components.v1 as components
 
@@ -684,11 +786,12 @@ if uploaded_files:
                                 "vulnerabilita_attese": vulnerabilita_attese,
                             },
                             final_synthesis=st.session_state.get("final_synthesis"),
+                            image_files=files_to_use if files_to_use else None,
                         )
                         if str(stima_costi).startswith("Errore"):
                             st.error(stima_costi)
                         else:
-                            st.markdown(stima_costi)
+                            render_cost_estimate_output(stima_costi)
                             st.warning("⚠️ NOTA: I prezzi sono puramente indicativi e riferiti a medie di mercato. Non sostituiscono un computo metrico estimativo professionale.")
                             success, remaining = consume_ai_credit(username)
                             if success:
